@@ -47,10 +47,15 @@ async def test_https_proxy_preserves_compressed_body_post_and_websocket(monkeypa
                 await ws.send_bytes(message.data)
         return ws
 
+    async def management(request):
+        assert 'Origin' not in request.headers
+        return web.Response(body=await request.read())
+
     upstream = web.Application()
     upstream.router.add_get('/data', data)
     upstream.router.add_post('/echo', echo)
     upstream.router.add_get('/ws', websocket)
+    upstream.router.add_post('/xa401/echo', management)
     captured = []
     original_socket = lan_proxy.listening_socket
 
@@ -64,6 +69,7 @@ async def test_https_proxy_preserves_compressed_body_post_and_websocket(monkeypa
         monkeypatch.setattr(lan_proxy, 'UPSTREAM', str(remote.make_url('')).rstrip('/'))
         close = await lan_proxy.start_proxy({'listen': '127.0.0.1', 'port': 0,
             'max_request_bytes': 128,
+            'bridge_port': remote.port,
             'allowed_subnets': ['127.0.0.0/8'], 'certificate': str(cert_path), 'private_key': str(key_path)}, None)
         import ssl
         context = ssl.create_default_context(cafile=str(cert_path))
@@ -84,6 +90,9 @@ async def test_https_proxy_preserves_compressed_body_post_and_websocket(monkeypa
                 async with client.post(base + '/echo', data=b'ok', headers={'Origin': base,
                     'Forwarded': 'for=1.2.3.4', 'X-Forwarded-For': '1.2.3.4'}, ssl=context) as response:
                     assert response.status == 200 and await response.read() == b'ok'
+                async with client.post(base + '/xa401/echo', data=b'private',
+                    headers={'Origin': base}, ssl=context) as response:
+                    assert response.status == 200 and await response.read() == b'private'
                 async with client.post(base + '/echo', data=b'A' * 129, ssl=context) as response:
                     assert response.status == 413
 

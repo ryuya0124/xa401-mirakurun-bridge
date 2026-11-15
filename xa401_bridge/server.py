@@ -16,6 +16,9 @@ from .epg import ProgramCache
 from .collector import EPGCollector
 from .session import ChannelSession
 from .http_security import loopback_boundary
+from .recording import Recorder
+from .recording_api import install_recording_routes
+from .recorded_playback import install_playback_routes
 
 LOG = logging.getLogger('xa401_bridge')
 
@@ -43,6 +46,7 @@ class Bridge:
         self.epg_task = None
         self.collector = EPGCollector(self, config.get('epg_collection', {}))
         self.collector_task = None
+        self.recorder = Recorder(self, config.get('recording', {}))
 
     @property
     def live_sessions(self):
@@ -70,12 +74,14 @@ class Bridge:
             raise
         LOG.info('Verified XA401; %s live services', len(self.device.services))
         if self.config.get('lan_https'):
-            self.close_lan_proxy = await start_proxy(self.config['lan_https'], self.index)
+            self.close_lan_proxy = await start_proxy(dict(self.config['lan_https'],
+                bridge_port=self.config.get('port', 40772)), self.index)
             LOG.info('Interface-bound LAN HTTPS frontend is ready')
         self.refresh_task = asyncio.create_task(self.refresh_loop())
         self.epg_task = asyncio.create_task(self.persist_epg())
         if self.collector.enabled:
             self.collector_task = asyncio.create_task(self.collector.run())
+        await self.recorder.start()
 
     async def persist_epg(self):
         while True:
@@ -101,6 +107,7 @@ class Bridge:
                 LOG.warning('Catalogue refresh failed (%s); keeping last catalogue', type(exc).__name__)
 
     async def close(self, app):
+        await self.recorder.close()
         if self.close_lan_proxy:
             await self.close_lan_proxy()
         for task in (self.collector_task, self.refresh_task, self.epg_task,
@@ -156,6 +163,9 @@ class Bridge:
         if service_id not in self.device.items:
             raise web.HTTPNotFound(text='Unknown service')
         channel, queue = await self.subscribe(service_id)
+        return await self.deliver(request, channel, queue)
+
+    async def deliver(self, request, channel, queue):
         try:
             try:
                 await asyncio.wait_for(channel.ready.wait(), timeout=35)
@@ -170,7 +180,7 @@ class Bridge:
                 chunk = await queue.get()
                 if chunk is None:
                     break
-                async with asyncio.timeout(10):
+                async with asyncio.timeout(120 if isinstance(channel.service_id, str) else 10):
                     await response.write(chunk)
             return response
         except (ConnectionError, TimeoutError):
@@ -223,4 +233,6 @@ def create_app(config):
     app.router.add_get('/api/services/{service_id}/stream', bridge.stream, allow_head=False)
     app.router.add_get('/health', health)
     app.router.add_get('/xa401/current-program-titles', current)
+    install_recording_routes(app, bridge)
+    install_playback_routes(app, bridge)
     return app

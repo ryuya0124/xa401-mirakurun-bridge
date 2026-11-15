@@ -1,5 +1,6 @@
 """Bounded LAN discovery and read-only ContentDirectory access."""
 import asyncio
+import hashlib
 import ipaddress
 import os
 import re
@@ -109,6 +110,8 @@ class Device:
         self.profile = None
         self.services = []
         self.items = {}
+        self.recordings = {}
+        self.recordings_updated = 0
         self.lock = asyncio.Lock()
 
     async def request(self, url, method='GET', **kwargs):
@@ -214,6 +217,8 @@ class Device:
             return self.services
 
     async def resource(self, service_id):
+        if isinstance(service_id, str) and service_id.startswith('recorded:'):
+            return await self.recorded_resource(service_id[9:].split('@', 1)[0])
         async with self.lock:
             await self.identify()
             item = self.items[service_id]
@@ -230,4 +235,48 @@ class Device:
             lan_url(resource.url, self.host)
             if not resource.protocol_info.is_dtcp:
                 raise ValueError('Expected a DTCP resource')
+            return resource
+
+    async def recorded_catalogue(self):
+        import time
+        async with self.lock:
+            await self.identify()
+            entries = {}
+            start = 0
+            for _ in range(20):
+                didl, count, total = await self.browse('0/rec/all', start=start)
+                for item in parse_didl(didl, self.profile):
+                    if not re.fullmatch(r'0/rec/all/pvr\?id=[0-9]+', item.id):
+                        continue
+                    token = hashlib.sha256(item.id.encode()).hexdigest()[:24]
+                    entries[token] = item
+                start += count
+                if not count or start >= total:
+                    break
+            self.recordings = entries
+            self.recordings_updated = time.time()
+            return self.recorded_summaries()
+
+    def recorded_summaries(self):
+        return [{'id': key, 'title': item.title, 'channel': item.channel_name,
+                 'date': item.date, 'duration': item.duration}
+                for key, item in self.recordings.items()]
+
+    async def recorded_resource(self, token):
+        if not re.fullmatch(r'[0-9a-f]{24}', token):
+            raise ValueError('Invalid recorded-program identifier')
+        if token not in self.recordings:
+            await self.recorded_catalogue()
+        async with self.lock:
+            await self.identify()
+            item = self.recordings[token]
+            didl, _, _ = await self.browse(item.id, metadata=True)
+            objects = parse_didl(didl, self.profile)
+            if len(objects) != 1 or objects[0].id != item.id:
+                raise ValueError('Recorded metadata identity changed')
+            resource = next((r for r in objects[0].resources if
+                'quality=' not in r.url and r.protocol_info.is_dtcp), None)
+            if resource is None:
+                raise ValueError('Original recorded resource unavailable')
+            lan_url(resource.url, self.host)
             return resource

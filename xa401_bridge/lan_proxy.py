@@ -67,7 +67,9 @@ async def start_proxy(config, index):
         return await handler(request)
 
     async def proxy(request):
-        target = upstream + request.raw_path
+        management = request.path.startswith(('/xa401/', '/api/xa401/'))
+        backend = f'http://127.0.0.1:{int(config.get("bridge_port", 40772))}' if management else upstream
+        target = backend + request.raw_path
         headers = headers_without_hop(request.headers)
         headers.popall('Host', None)
         for key in list(headers):
@@ -76,6 +78,10 @@ async def start_proxy(config, index):
         headers['X-Forwarded-Proto'] = 'https'
         headers['X-Forwarded-Host'] = request.host
         headers['X-Forwarded-For'] = request.remote
+        if management:
+            # This proxy already enforced the browser origin. The private API sees
+            # its own loopback Host and must not receive a mismatched public Origin.
+            headers.popall('Origin', None)
         if request.headers.get('Upgrade', '').lower() == 'websocket':
             protocols = [p.strip() for p in request.headers.get('Sec-WebSocket-Protocol', '').split(',') if p.strip()]
             for key in list(headers):

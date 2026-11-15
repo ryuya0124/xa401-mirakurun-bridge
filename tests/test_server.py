@@ -1,4 +1,6 @@
 import asyncio
+import sys
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -60,3 +62,34 @@ async def test_same_channel_shared_other_channel_busy_and_last_client_cancels(mo
     third, c = await bridge.subscribe(456)
     assert third is not first
     await bridge.unsubscribe(third, c)
+
+
+async def test_recording_dashboard_json_jobs_cancel_and_restricted_download(monkeypatch, tmp_path):
+    monkeypatch.setattr(server, 'credentials_from_file', lambda _: object())
+    monkeypatch.setattr(server, 'source_index', lambda _: None)
+
+    async def start(self, app):
+        self.device = SimpleNamespace(services=[], items={123: {
+            'service': {'name': 'Channel'}, 'current_title': 'Title'}},
+            recordings={}, recordings_updated=time.time(), recorded_summaries=lambda: [])
+
+    monkeypatch.setattr(server.Bridge, 'start', start)
+    config = {'credentials': 'unused', 'state_dir': str(tmp_path / 'state'), 'udn': 'uuid:own',
+        'recording': {'enabled': True, 'directory': str(tmp_path / 'recordings'),
+                      'ffprobe': sys.executable, 'ffmpeg': sys.executable}}
+    async with TestClient(TestServer(server.create_app(config))) as client:
+        assert (await client.get('/xa401/recordings')).status == 200
+        assert (await client.get('/api/xa401/recordings')).status == 200
+        assert (await client.get('/api/xa401/original')).status == 200
+        assert (await (await client.get('/xa401/api/recording')).json())['enabled']
+        assert await (await client.get('/xa401/api/recorded')).json() == []
+        assert (await client.post('/xa401/api/jobs', data='form')).status == 415
+        assert (await client.post('/xa401/api/jobs', json={'service_id': 999})).status == 400
+        response = await client.post('/xa401/api/jobs', json={'service_id': 123, 'duration_seconds': 60})
+        assert response.status == 201
+        job = await response.json()
+        assert (await client.get('/xa401/api/jobs/' + job['id'] + '/file')).status == 404
+        stopped = await (await client.post('/xa401/api/jobs/' + job['id'] + '/stop')).json()
+        assert stopped['status'] == 'cancelled'
+        assert (await client.post('/xa401/api/jobs', json={'service_id': 123},
+            headers={'Origin': 'https://attacker.invalid'})).status == 403

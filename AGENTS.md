@@ -4,6 +4,7 @@
 - Keep credentials, real device configuration, PCAP, recordings and runtime state out of Git.
 - Never log certificate/private-key values or unfiltered protocol exceptions.
 - Expose read-only discovery, Browse and streaming only. Do not add Move/dubbing or provisioning implicitly.
+- User explicitly authorized PC recording/scheduling and direct playback of XA401 recordings. Keep PC job writes separate from read-only STB access; never replace direct playback with a mandatory PC download.
 - Keep the API bound to loopback. Do not modify VPN, routes or firmware.
 - Prefer original-quality streams. Do not silently fall back to a transcoded quality.
 - Run `python -m pytest -q` after receiver/server changes. Mock tests are not hardware verification.

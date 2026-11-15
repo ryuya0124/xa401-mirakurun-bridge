@@ -32,6 +32,10 @@ def main():
     for field in ('credentials', 'state_dir'):
         path = Path(config[field]).expanduser()
         config[field] = str((args.config.parent / path).resolve())
+    if config.get('recording', {}).get('enabled'):
+        for field in ('directory', 'ffmpeg', 'ffprobe'):
+            path = Path(config['recording'][field]).expanduser()
+            config['recording'][field] = str((args.config.parent / path).resolve())
     host = config.get('listen', '127.0.0.1')
     if not ipaddress.ip_address(host).is_loopback:
         parser.error('The unauthenticated streaming API must listen on loopback; use an authenticated proxy for remote use')

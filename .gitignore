@@ -12,6 +12,11 @@ credentials.env
 *.pcap
 *.pcapng
 *.ts
+*.part
+*.partial
+*.finalizing
+*.m2ts
+*.mp4
 *.key
 .env
 deploy/private-https.env

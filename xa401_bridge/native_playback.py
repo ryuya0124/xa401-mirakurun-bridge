@@ -50,6 +50,24 @@ def install_native_routes(app, bridge):
             'duration': None, 'stream_url': f'/xa401/api/native/channels/{key}/stream'},
             headers={'Cache-Control': 'no-store'})
 
+    async def guide(request):
+        # Read the existing observed cache only; opening this page must not acquire a tuner.
+        observed = {p['networkId'] * 100000 + p['serviceId']: p for p in bridge.epg.programs()}
+        channels = []
+        for key, value in bridge.device.items.items():
+            service = value['service']
+            program = observed.get(key)
+            channels.append({'id': str(key), 'name': service['name'],
+                'type': service['channel']['type'], 'number': service.get('remoteControlKeyId', 0),
+                'program': None if program is None else {
+                    'event_id': program['eventId'], 'title': program['name'],
+                    'description': program.get('description', ''),
+                    'extended': program.get('extended', {}),
+                    'start_at': program['startAt'], 'duration': program['duration']}})
+        return web.json_response({'protocol': 1, 'generated_at': int(time.time() * 1000),
+            'source': 'observed_SIT', 'future_schedule_available': False, 'channels': channels},
+            headers={'Cache-Control': 'no-store'})
+
     async def player(request):
         return web.FileResponse(directory / 'desktop-player.html', headers={'Cache-Control': 'no-cache'})
 
@@ -59,6 +77,7 @@ def install_native_routes(app, bridge):
     app.router.add_get('/api/xa401/desktop-player', player)
     app.router.add_get('/xa401/desktop-player.mjs', script)
     app.router.add_get('/xa401/api/native/catalogue', catalogue)
+    app.router.add_get('/xa401/api/native/guide', guide)
     app.router.add_get('/xa401/api/native/recordings/{token}', recording)
     app.router.add_get('/xa401/api/native/channels/{channel}', channel)
     app.router.add_get('/xa401/api/native/channels/{service_id}/stream', bridge.stream, allow_head=False)

@@ -79,6 +79,10 @@ SITのARIB記述子・文字列はariblib 0.2.0（MIT、公開wheelを固定）�
 
 ## コード構成とセキュリティ
 
+WindowsのWinUI番組表向けに、`GET /xa401/api/native/guide`で観測済みSITの現在・直近の番組を配信します。
+放送局・開始時刻・長さ・番組名・説明を返し、未取得局はprogram=null、未来予定の取得可否はfalseです。
+閲覧による追加受信は行わず、既存キャッシュだけを読みます。保護境界・HTTP/HTTPS入口は既存のnative APIと同じです。
+
 探索・XMLはdevice.py、DTCP受信はreceiver.py、受信の共有単位はsession.py、2枠管理と互換APIはserver.py、SIT解析とキャッシュはepg.py、収集はcollector.py、HTTPS中継はlan_proxy.py、Host/Origin検査はhttp_security.pyに分離しています。PC録画はrecording.py／ts_file.py、管理APIはrecording_api.py、XA401直接再生はrecorded_playback.py、標準録画UIへの変換はkonomi_recordings.py、ブラウザー側の時間ソースはweb/native-player.mjsです。配備用コードはdeploy/、検査はtests/です。
 
 依存はuv.lockで固定し、CIでも同じロックを使用します。最新版でも未修正のecdsaリスク1件が残ります。[監査結果と残る制約](SECURITY.md)を確認してください。

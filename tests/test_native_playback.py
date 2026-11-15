@@ -29,3 +29,27 @@ async def test_desktop_catalogue_and_live_source_are_same_origin_without_konomit
         assert (await client.get('/api/xa401/desktop-player')).status == 200
         assert (await client.get('/xa401/desktop-player.mjs')).status == 200
         assert (await client.post('/xa401/api/native/catalogue')).status == 405
+
+
+async def test_native_guide_preserves_observed_times_and_unknown_channels_without_streaming():
+    async def forbidden_stream(request):
+        raise AssertionError('Guide must not start reception')
+    program = {'networkId': 1, 'serviceId': 23, 'eventId': 9,
+        'name': 'Observed <title>', 'description': 'Description', 'extended': {'Detail': 'Text'},
+        'startAt': 1800000000000, 'duration': 1800000}
+    device = SimpleNamespace(items={100023: {'service': {'name': 'Station', 'channel': {'type': 'GR'}, 'remoteControlKeyId': 1}},
+        200023: {'service': {'name': 'Other network', 'channel': {'type': 'BS'}}}})
+    bridge = SimpleNamespace(device=device, stream=forbidden_stream,
+        epg=SimpleNamespace(programs=lambda: [program]))
+    app = web.Application()
+    install_native_routes(app, bridge)
+    async with TestClient(TestServer(app)) as client:
+        response = await client.get('/xa401/api/native/guide')
+        result = await response.json()
+        assert response.headers['Cache-Control'] == 'no-store'
+        assert result['source'] == 'observed_SIT' and result['future_schedule_available'] is False
+        assert result['channels'][0]['program']['start_at'] == program['startAt']
+        assert result['channels'][0]['program']['title'] == 'Observed <title>'
+        assert result['channels'][1]['program'] is None
+        assert 'stream_url' not in str(result)
+        assert (await client.post('/xa401/api/native/guide')).status == 405

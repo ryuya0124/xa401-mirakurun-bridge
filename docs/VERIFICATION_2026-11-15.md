@@ -1,5 +1,11 @@
 # 実機検証 2026-11-15
 
+## 最新の追加結果
+
+利用者がスマホの映像・音声再生成功を確認しました。SITから実際の現在番組を取得し、KonomiTVのprogram_presentへの反映も確認。ローカルテストは24件成功。LANとTailnet IPv6用の独立Nginxを追加し、既存の正規ワイルドカード証明書でHTTPS 200とOriginal TSの同期4096/4096を確認しました。
+
+内部DNSはMacが親でDebianへ10分ごとに同期します。初回にDebianだけへ追加したレコードが同期で消え、NXDOMAINを再現。親Macへ公式rewrite APIでA/AAAAを追加し、子側とともに再確認しました。詳しくは[非公開HTTPSの手順](PRIVATE_HTTPS.md)と[SIT番組情報](EPG.md)を参照。以下の未確認という記述は各検証時点の履歴です。
+
 ## 確認できたこと
 
 - Windows上の独立venvから、実XA401のUDNとモデルを確認し、DMSからライブ133サービスを取得した。

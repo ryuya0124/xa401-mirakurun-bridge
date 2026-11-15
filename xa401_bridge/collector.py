@@ -41,7 +41,7 @@ class EPGCollector:
             if self.due[sid] <= now:
                 # First populate terrestrial channels, then BS, then cable.
                 rank = {'GR': 0, 'BS': 1, 'CS': 2, 'CATV': 2}[service['channel']['type']]
-                candidates.append((self.due[sid], rank, service.get('remoteControlKeyId', 0), sid))
+                candidates.append((rank, self.due[sid], service.get('remoteControlKeyId', 0), sid))
         return min(candidates)[-1] if candidates else None
 
     async def collect(self, service_id):

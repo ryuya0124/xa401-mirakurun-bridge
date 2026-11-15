@@ -67,6 +67,8 @@ def test_schedule_refresh_expiry_priorities_and_failure_backoff():
     assert c.due[2] == 1902
     c.schedule_result(3, 'busy', 1001)
     assert c.next_service(1002) is None
+    # A terrestrial refresh that is now due should precede uncollected cable.
+    assert c.next_service(1201) == 1
     assert c.current_program(1, 1200) is None
 
 

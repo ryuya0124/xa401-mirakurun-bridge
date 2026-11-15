@@ -30,6 +30,5 @@ credentials.env
 *.keystore
 credential-backups/
 .env
-native/target/
 deploy/private-https.env
 deploy/private-https-runtime/

@@ -18,4 +18,4 @@ jobs:
           version: '0.13.8'
       - run: uv sync --frozen --extra test --no-python-downloads
       - run: uv run --frozen --extra test --no-python-downloads python -m pytest -q
-      - run: node --test tests/test_timeline.mjs
+      - run: node --test tests/test_*.mjs

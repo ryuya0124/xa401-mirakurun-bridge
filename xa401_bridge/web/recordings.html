@@ -93,6 +93,25 @@
     #playback:fullscreen video {
       max-height: 72vh;
     }
+    #video-frame {
+      position: relative;
+      aspect-ratio: 16 / 9;
+      background: #000;
+    }
+    #video-frame video,
+    #held-frame {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    #held-frame {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+    #held-frame[hidden] {
+      display: none;
+    }
     @media (max-width: 480px) {
       body {
         padding: 12px;
@@ -145,7 +164,10 @@
   </section>
   <section id="playback" hidden>
     <h2 id="playing-title">XA401から直接再生</h2>
-    <video id="video" playsinline style="width: 100%"></video>
+    <div id="video-frame">
+      <video id="video" playsinline></video
+      ><canvas id="held-frame" hidden aria-hidden="true"></canvas>
+    </div>
     <label for="timeline">再生位置</label>
     <input
       id="timeline"
@@ -178,5 +200,5 @@
     <h2>PCの録画・予約</h2>
     <div id="job-list"></div>
   </section>
-  <script type="module" src="/xa401/recordings.js?v=20261115-2"></script>
+  <script type="module" src="/xa401/recordings.js?v=20261115-3"></script>
 </html>

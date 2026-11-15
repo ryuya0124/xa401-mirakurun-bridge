@@ -1,5 +1,10 @@
 import { Mpeg2TsPlayer } from "/xa401/player-lib/index.js?rev=9cde78d";
-import { RecordingTimeline, durationSeconds, clock } from "/xa401/timeline.mjs?v=20261115-2";
+import {
+  RecordingTimeline,
+  durationSeconds,
+  clock,
+} from "/xa401/timeline.mjs?v=20261115-2";
+import { PlaybackSession } from "/xa401/playback-session.mjs?v=1";
 const $ = (id) => document.getElementById(id);
 let state = {},
   loaded = false;
@@ -140,8 +145,7 @@ $("live").onsubmit = async (e) => {
     message(e.message);
   }
 };
-let player = null,
-  selected = null,
+let selected = null,
   playerId = crypto.randomUUID().replaceAll("-", "");
 let timeline = null,
   dragging = false,
@@ -155,32 +159,91 @@ function showPosition(value) {
     " / " +
     (timeline.duration ? clock(timeline.duration) : "時間未取得");
 }
+const video = $("video");
+const session = new PlaybackSession(() => {
+  const player = new Mpeg2TsPlayer(video, {
+    mediaSource: "auto",
+    passthrough: false,
+  });
+  player.addEventListener("error", (e) =>
+    message("再生エラー: " + e.detail.error.message),
+  );
+  return player;
+});
+let frameCallback = null;
+function holdFrame() {
+  if (frameCallback !== null) video.cancelVideoFrameCallback?.(frameCallback);
+  frameCallback = null;
+  const canvas = $("held-frame");
+  if (video.readyState < 2 || !video.videoWidth) return;
+  try {
+    canvas.width = Math.min(1920, video.videoWidth);
+    canvas.height = Math.round(
+      (canvas.width * video.videoHeight) / video.videoWidth,
+    );
+    canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
+    canvas.hidden = false;
+  } catch (_) {
+    /* Frame retention is optional. */
+  }
+}
+function releaseFrame() {
+  const current = generation;
+  const release = () => {
+    frameCallback = null;
+    if (current === generation && readyGeneration === current)
+      $("held-frame").hidden = true;
+  };
+  if (video.requestVideoFrameCallback)
+    frameCallback = video.requestVideoFrameCallback(release);
+  else requestAnimationFrame(() => requestAnimationFrame(release));
+}
+function mediaPosition() {
+  if (!timeline || !navigator.mediaSession) return;
+  try {
+    if (timeline.duration)
+      navigator.mediaSession.setPositionState({
+        duration: timeline.duration,
+        playbackRate: video.playbackRate,
+        position: timeline.position(video.currentTime),
+      });
+    navigator.mediaSession.playbackState = video.paused ? "paused" : "playing";
+  } catch (_) {
+    /* Older browsers may not implement position state. */
+  }
+}
+function mediaTitle(r) {
+  document.title = r.title;
+  video.title = r.title;
+  video.setAttribute("aria-label", r.title);
+  if (navigator.mediaSession && typeof MediaMetadata !== "undefined") {
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: r.title,
+      artist: r.channel || "XA401",
+      album: "XA401の録画",
+    });
+  }
+}
 async function playRecorded(r, position = 0) {
+  const sameRecording = selected?.id === r.id;
+  if (sameRecording) holdFrame();
+  else $("held-frame").hidden = true;
   const current = ++generation;
   readyGeneration = 0;
-  if (player) player.destroy();
   selected = r;
+  if (!sameRecording) mediaTitle(r);
   timeline = new RecordingTimeline(durationSeconds(r.duration), position);
   $("timeline").max = String(timeline.duration || 0);
   $("timeline").disabled = !timeline.duration;
   $("playback").hidden = false;
   $("playing-title").textContent = r.title;
   showPosition(timeline.offset);
-  const instance = new Mpeg2TsPlayer($("video"), {
-    mediaSource: "auto",
-    passthrough: false,
-  });
-  player = instance;
-  instance.addEventListener("error", (e) => {
-    if (generation === current)
-      message("再生エラー: " + e.detail.error.message);
-  });
   try {
     message("XA401に接続しています…");
-    await instance.load(
+    const active = await session.load(
       `/xa401/api/recorded/${r.id}/stream?player=${playerId}&position=${timeline.offset}`,
     );
-    if (generation !== current) return;
+    if (!active || generation !== current) return;
     readyGeneration = current;
     message("XA401から直接再生中");
     await $("video").play();
@@ -195,13 +258,17 @@ $("video").addEventListener("playing", () => {
   if (timeline && readyGeneration === generation)
     timeline.start($("video").currentTime);
   $("toggle-play").textContent = "一時停止";
+  if (readyGeneration === generation) releaseFrame();
+  mediaPosition();
 });
 $("video").addEventListener("pause", () => {
   $("toggle-play").textContent = "再生";
+  mediaPosition();
 });
 $("video").addEventListener("timeupdate", () => {
   if (timeline && readyGeneration === generation && !dragging)
     showPosition(timeline.position($("video").currentTime));
+  if (readyGeneration === generation) mediaPosition();
 });
 $("video").addEventListener("ended", () => {
   if (timeline) showPosition(timeline.duration);
@@ -240,13 +307,38 @@ $("volume").oninput = () => {
   $("video").volume = Number($("volume").value);
 };
 $("fullscreen").onclick = () => $("playback").requestFullscreen?.();
-$("stop-player").onclick = () => {
+function stopPlayback() {
   ++generation;
-  if (player) player.destroy();
-  player = null;
+  session.destroy();
+  selected = null;
+  timeline = null;
+  if (frameCallback !== null) video.cancelVideoFrameCallback?.(frameCallback);
+  frameCallback = null;
+  $("held-frame").hidden = true;
   $("playback").hidden = true;
-};
-window.addEventListener("pagehide", () => player?.destroy());
+  document.title = "XA401 録画管理";
+  if (navigator.mediaSession) {
+    navigator.mediaSession.metadata = null;
+    navigator.mediaSession.playbackState = "none";
+  }
+}
+$("stop-player").onclick = stopPlayback;
+window.addEventListener("pagehide", stopPlayback);
+if (navigator.mediaSession) {
+  for (const [action, handler] of Object.entries({
+    play: () => video.play().catch(() => {}),
+    pause: () => video.pause(),
+    stop: stopPlayback,
+    seekto: ({ seekTime }) =>
+      selected && playRecorded(selected, timeline.target(seekTime)),
+    seekbackward: ({ seekOffset }) => skip(-(seekOffset || 10)),
+    seekforward: ({ seekOffset }) => skip(seekOffset || 30),
+  })) {
+    try {
+      navigator.mediaSession.setActionHandler(action, handler);
+    } catch (_) {}
+  }
+}
 $("load-recorded").onclick = async () => {
   try {
     let items = await api("recorded");
@@ -275,12 +367,23 @@ refresh();
 setInterval(refresh, 5000);
 
 // Preserve original-quality playback when entering KonomiTV's saved videos.
-document.querySelector('a[href="/videos/"]').addEventListener("click", e => {
+document.querySelector('a[href="/videos/"]').addEventListener("click", (e) => {
   try {
     const key = "KonomiTV-Settings";
     const settings = JSON.parse(localStorage.getItem(key) || "{}");
-    if (!settings || typeof settings !== "object" || Array.isArray(settings)) throw Error();
-    Object.assign(settings, {video_streaming_quality: "original", video_streaming_quality_cellular: "original", video_data_saver_mode: false, video_data_saver_mode_cellular: false});
+    if (!settings || typeof settings !== "object" || Array.isArray(settings))
+      throw Error();
+    Object.assign(settings, {
+      video_streaming_quality: "original",
+      video_streaming_quality_cellular: "original",
+      video_data_saver_mode: false,
+      video_data_saver_mode_cellular: false,
+    });
     localStorage.setItem(key, JSON.stringify(settings));
-  } catch (_) { e.preventDefault(); message("画質設定を保存できませんでした。KonomiTVの設定でOriginalを選んでください。"); }
+  } catch (_) {
+    e.preventDefault();
+    message(
+      "画質設定を保存できませんでした。KonomiTVの設定でOriginalを選んでください。",
+    );
+  }
 });

@@ -62,9 +62,9 @@ export class TimeSeekPlayer extends EventTarget {
     this.onSeeking = () => {
       if (this.destroyed || this.state === "idle" || !this.buffer) return;
       const target = this.video.currentTime;
+      clearTimeout(this.seekTimer);
       if (inside(this.video.buffered, target)) return;
       // Coalesce a scrub gesture, retaining the same video/MS/worker objects.
-      clearTimeout(this.seekTimer);
       this.seekTimer = setTimeout(
         () => this.startAt(target).catch(() => {}),
         60,

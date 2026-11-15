@@ -1,0 +1,11 @@
+{
+  "listen": "127.0.0.1",
+  "port": 40772,
+  "location": "http://192.168.1.50:57777/DEVICE_DESCRIPTION_PATH",
+  "udn": "uuid:REPLACE_WITH_YOUR_XA401_UDN",
+  "source": "192.168.1.10",
+  "credentials": "./private/credentials.env",
+  "state_dir": "./state",
+  "quality": "original",
+  "folders": ["0/tb", "0/bs", "0/remux"]
+}

@@ -1,0 +1,112 @@
+{
+  "source": [
+    {
+      "codec_name": "mpeg2video",
+      "codec_type": "video",
+      "width": 1440,
+      "height": 1080,
+      "id": "0x100",
+      "side_data_list": [
+        {}
+      ]
+    },
+    {
+      "codec_name": "aac",
+      "codec_type": "audio",
+      "id": "0x110"
+    },
+    {
+      "codec_name": "arib_caption",
+      "codec_type": "subtitle",
+      "id": "0x130"
+    },
+    {
+      "codec_name": "bin_data",
+      "codec_type": "data",
+      "id": "0x138"
+    }
+  ],
+  "output": [
+    {
+      "codec_name": "mpeg2video",
+      "codec_type": "video",
+      "width": 1440,
+      "height": 1080,
+      "id": "0x100",
+      "side_data_list": [
+        {}
+      ]
+    },
+    {
+      "codec_name": "aac",
+      "codec_type": "audio",
+      "id": "0x110"
+    },
+    {
+      "codec_name": "aac",
+      "codec_type": "audio",
+      "id": "0x111"
+    },
+    {
+      "codec_name": "arib_caption",
+      "codec_type": "subtitle",
+      "id": "0x130"
+    },
+    {
+      "codec_name": "bin_data",
+      "codec_type": "data",
+      "id": "0x138"
+    }
+  ],
+  "media_source": "real_XA401_live",
+  "comparison": {
+    "video": {
+      "three_distinct_blocks_identical": true,
+      "matches": [
+        {
+          "source_offset": 0,
+          "result_offset": 0,
+          "bytes": 65536,
+          "sha256": "eccd7e2c3b4efcacef00083e217091919d85b3b683403e46e326cb6ab1433708"
+        },
+        {
+          "source_offset": 65536,
+          "result_offset": 65536,
+          "bytes": 65536,
+          "sha256": "f640206bd73b749c24fac93c8353e919bf6cc99a52dfa4399ea9a8ee9f7e3f76"
+        },
+        {
+          "source_offset": 131072,
+          "result_offset": 131072,
+          "bytes": 65536,
+          "sha256": "3d7acb2a05574230578210e2238fe4e47987872e902feefe8390a61120798350"
+        }
+      ]
+    },
+    "audio": {
+      "three_distinct_blocks_identical": true,
+      "matches": [
+        {
+          "source_offset": 4096,
+          "result_offset": 3582,
+          "bytes": 4096,
+          "sha256": "03ac39fab2d5f89f7dd05d3db8c4a39e6f70f52ffd1068c3218d21f242f7ca21"
+        },
+        {
+          "source_offset": 8192,
+          "result_offset": 7678,
+          "bytes": 4096,
+          "sha256": "8214cbda614a01a54cb61f27b3cb8f39ce5d71a52a5814a2ba2395ce68113a83"
+        },
+        {
+          "source_offset": 12288,
+          "result_offset": 11774,
+          "bytes": 4096,
+          "sha256": "09b1ebf586d0e8026a22cdf586a4b8909d0113cd52d04bae7e61e6e08257dbc7"
+        }
+      ]
+    }
+  },
+  "browser_playback_verified": false,
+  "original_encoded_av_preserved_in_observed_overlap": true
+}

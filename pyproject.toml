@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "xa401-mirakurun-bridge"
+version = "0.1.0"
+description = "Standalone XA401 streaming receiver with a Mirakurun-compatible API"
+readme = "README.md"
+requires-python = ">=3.13,<3.15"
+license = "MIT"
+dependencies = [
+  "pydtcpip @ git+https://github.com/tsukumijima/pydtcpip.git@e726fc548c01701f5949f8a93d47b45b038395df",
+  "aiohttp>=3.12,<4", "python-dotenv>=1.1,<2",
+]
+
+[project.scripts]
+xa401-bridge = "xa401_bridge.__main__:main"
+
+[project.optional-dependencies]
+test = ["pytest>=8,<10", "pytest-asyncio>=1,<2"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["xa401_bridge"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+

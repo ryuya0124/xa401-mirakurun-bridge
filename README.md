@@ -76,3 +76,9 @@ python -m pytest -q
 本アプリはMIT。認証・復号は[pydtcpip](https://github.com/tsukumijima/pydtcpip)（MIT、固定コミット使用）を利用します。KonomiTV本体・バイナリ・資格情報は配布しません。各技術の特許・商標・コンテンツの権利を許諾するものではありません。
 
 SITのARIB記述子・文字列はariblib 0.2.0（MIT、公開wheelを固定）で読み取ります。[ライセンス通知](licenses/ariblib-MIT.txt)を同梱します。TLSを独自ドメインで使う構成は[非公開HTTPSの設定](docs/PRIVATE_HTTPS.md)を参照してください。
+
+## コード構成とセキュリティ
+
+探索・XMLはdevice.py、DTCP受信はreceiver.py、受信の共有単位はsession.py、2枠管理と互換APIはserver.py、SIT解析とキャッシュはepg.py、収集はcollector.py、HTTPS中継はlan_proxy.py、Host/Origin検査はhttp_security.pyに分離しています。配備用コードはdeploy/、検査はtests/です。
+
+依存はuv.lockで固定し、CIでも同じロックを使用します。最新版でも未修正のecdsaリスク1件が残ります。[監査結果と残る制約](SECURITY.md)を確認してください。

@@ -11,6 +11,7 @@ import ssl
 import aiohttp
 from aiohttp import web
 from multidict import CIMultiDict
+from .http_security import browser_origin, hostname
 
 HOP = {'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization',
        'te', 'trailer', 'transfer-encoding', 'upgrade'}
@@ -41,6 +42,10 @@ async def start_proxy(config, index):
     if not ipaddress.ip_address(address).is_private:
         raise ValueError('LAN HTTPS must bind a private IPv4 address')
     networks = tuple(ipaddress.ip_network(n) for n in config['allowed_subnets'])
+    hosts = {hostname(h) for h in config.get('allowed_hosts', [address])}
+    max_body = int(config.get('max_request_bytes', 40 * 1024 * 1024))
+    if not hosts or not 1 <= max_body <= 40 * 1024 * 1024:
+        raise ValueError('Explicit hosts and a request limit of at most 40 MiB are required')
     if not networks or any(not n.is_private or n.version != 4 for n in networks):
         raise ValueError('LAN HTTPS requires explicit private IPv4 client subnets')
     # Deliberately fixed upstream: this is not a user-selectable open proxy.
@@ -52,18 +57,25 @@ async def start_proxy(config, index):
     async def boundary(request, handler):
         try:
             peer = ipaddress.ip_address(request.remote)
-        except ValueError:
+        except (ValueError, TypeError):
             raise web.HTTPForbidden()
         if not any(peer in network for network in networks):
             raise web.HTTPForbidden()
+        if hostname(request.host) not in hosts:
+            raise web.HTTPMisdirectedRequest(text='This host is not configured')
+        browser_origin(request)
         return await handler(request)
 
     async def proxy(request):
         target = upstream + request.raw_path
         headers = headers_without_hop(request.headers)
         headers.popall('Host', None)
+        for key in list(headers):
+            if key.lower() == 'forwarded' or key.lower().startswith('x-forwarded-'):
+                headers.popall(key, None)
         headers['X-Forwarded-Proto'] = 'https'
         headers['X-Forwarded-Host'] = request.host
+        headers['X-Forwarded-For'] = request.remote
         if request.headers.get('Upgrade', '').lower() == 'websocket':
             protocols = [p.strip() for p in request.headers.get('Sec-WebSocket-Protocol', '').split(',') if p.strip()]
             for key in list(headers):
@@ -90,7 +102,14 @@ async def start_proxy(config, index):
                     await asyncio.gather(*tasks, return_exceptions=True)
                     await local.close()
                 return local
-        body = request.content if request.can_read_body else None
+        body = None
+        if request.can_read_body:
+            try:
+                async with asyncio.timeout(30):
+                    # request.read enforces client_max_size for streamed/chunked uploads too.
+                    body = await request.read()
+            except TimeoutError:
+                raise web.HTTPRequestTimeout(text='Request body timed out') from None
         try:
             async with client.request(request.method, target, headers=headers, data=body,
                                       allow_redirects=False) as result:
@@ -105,7 +124,7 @@ async def start_proxy(config, index):
                 return response
             raise web.HTTPBadGateway(text='Local KonomiTV is unavailable') from None
 
-    app = web.Application(middlewares=[boundary], client_max_size=40 * 1024 * 1024)
+    app = web.Application(middlewares=[boundary], client_max_size=max_body)
     app.router.add_route('*', '/{path:.*}', proxy)
     runner = web.AppRunner(app, access_log=None, handler_cancellation=True)
     sock = None

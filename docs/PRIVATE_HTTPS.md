@@ -59,3 +59,5 @@ python prepare_private_dns.py activate --config /config/AdGuardHome.yaml
 - 映像は出るが番組情報が遅い：SITを受け取ってからKonomiTVが取り込むまで、更新間隔分の待ちがある。現在番組だけを収集し、未視聴チャンネルの週間EPGは生成しない。
 
 OSのVPN経路やTailscaleの全体設定は変更していません。外部公開用のポート転送やCloudflare Tunnelは不要です。
+
+Host検査のため、Windows側lan_https.allowed_hostsへLAN側IPとtv-home.ryuya-dev.netの両方を設定してください。IPだけを許可しているとドメイン経由は421になります。Originが別サイトの要求も拒否します。詳細はSECURITY.md。

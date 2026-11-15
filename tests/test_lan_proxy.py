@@ -33,6 +33,8 @@ async def test_https_proxy_preserves_compressed_body_post_and_websocket(monkeypa
         return web.Response(body=payload, headers={'Content-Encoding': 'gzip'})
 
     async def echo(request):
+        assert 'Forwarded' not in request.headers
+        assert request.headers['X-Forwarded-For'] == '127.0.0.1'
         return web.Response(body=await request.read())
 
     async def websocket(request):
@@ -61,6 +63,7 @@ async def test_https_proxy_preserves_compressed_body_post_and_websocket(monkeypa
     async with TestServer(upstream) as remote:
         monkeypatch.setattr(lan_proxy, 'UPSTREAM', str(remote.make_url('')).rstrip('/'))
         close = await lan_proxy.start_proxy({'listen': '127.0.0.1', 'port': 0,
+            'max_request_bytes': 128,
             'allowed_subnets': ['127.0.0.0/8'], 'certificate': str(cert_path), 'private_key': str(key_path)}, None)
         import ssl
         context = ssl.create_default_context(cafile=str(cert_path))
@@ -73,6 +76,23 @@ async def test_https_proxy_preserves_compressed_body_post_and_websocket(monkeypa
                     assert await response.read() == payload
                 async with client.post(base + '/echo', data=b'\x00\x47body', ssl=context) as response:
                     assert await response.read() == b'\x00\x47body'
+                async with client.get(base + '/data?x=1', headers={'Host': 'attacker.invalid'}, ssl=context) as response:
+                    assert response.status == 421
+                async with client.post(base + '/echo', data=b'no',
+                    headers={'Origin': 'https://attacker.invalid'}, ssl=context) as response:
+                    assert response.status == 403
+                async with client.post(base + '/echo', data=b'ok', headers={'Origin': base,
+                    'Forwarded': 'for=1.2.3.4', 'X-Forwarded-For': '1.2.3.4'}, ssl=context) as response:
+                    assert response.status == 200 and await response.read() == b'ok'
+                async with client.post(base + '/echo', data=b'A' * 129, ssl=context) as response:
+                    assert response.status == 413
+
+                async def chunks():
+                    yield b'A' * 80
+                    yield b'B' * 80
+
+                async with client.post(base + '/echo', data=chunks(), ssl=context) as response:
+                    assert response.status == 413
                 async with client.ws_connect(base + '/ws', ssl=context) as ws:
                     await ws.send_str('hello')
                     assert (await ws.receive(timeout=2)).data == 'hello'

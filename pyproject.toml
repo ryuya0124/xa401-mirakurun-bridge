@@ -10,8 +10,9 @@ readme = "README.md"
 requires-python = ">=3.13,<3.15"
 license = "MIT"
 dependencies = [
-  "pydtcpip @ git+https://github.com/tsukumijima/pydtcpip.git@e726fc548c01701f5949f8a93d47b45b038395df",
-  "aiohttp>=3.12,<4", "python-dotenv>=1.1,<2",
+  "pydtcpip @ git+https://github.com/tsukumijima/pydtcpip.git@0114ed187d86902a879bcd775358cbb0ab917ba7",
+  "aiohttp>=3.14.5,<4", "python-dotenv>=1.2.4,<2", "multidict>=7.2.1,<8",
+  "defusedxml>=0.7.1,<1",
   "ariblib @ https://github.com/tsukumijima/ariblib/releases/download/v0.2.0/ariblib-0.2.0-py3-none-any.whl",
 ]
 

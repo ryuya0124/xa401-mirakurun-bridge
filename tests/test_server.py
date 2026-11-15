@@ -27,6 +27,9 @@ async def test_mirakurun_subset_uses_catalogue_without_fabricating_epg(monkeypat
         assert (await (await client.get('/health')).json())['maximum_distinct_channels'] == maximum
         assert (await client.get('/api/services/999/stream')).status == 404
         assert (await client.post('/api/services')).status == 405
+        assert (await client.get('/health', headers={'Host': 'attacker.invalid'})).status == 421
+        assert (await client.get('/health', headers={'Origin': 'https://attacker.invalid'})).status == 403
+        assert (await client.get('/health', headers={'Sec-Fetch-Site': 'cross-site'})).status == 403
 
 
 async def test_same_channel_shared_other_channel_busy_and_last_client_cancels(monkeypatch, tmp_path):

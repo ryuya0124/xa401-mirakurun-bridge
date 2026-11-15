@@ -5,10 +5,12 @@ import os
 import re
 import socket
 import subprocess
+from pathlib import Path
 from urllib.parse import urljoin, urlsplit
 from xml.etree import ElementTree as ET
 
 import aiohttp
+from defusedxml.ElementTree import fromstring
 from pydtcpip.dlna.arib import ARIB_PUA_TO_UNICODE
 from pydtcpip.dlna.description import parse_device_description
 from pydtcpip.dlna.didl import parse_didl
@@ -31,7 +33,7 @@ def lan_url(value, host=None):
 def xml(data):
     if b'<!DOCTYPE' in data.upper() or b'<!ENTITY' in data.upper():
         raise ValueError('DTD and XML entities are not supported')
-    return ET.fromstring(data)
+    return fromstring(data, forbid_dtd=True, forbid_entities=True, forbid_external=True)
 
 
 def local(tag):
@@ -44,7 +46,8 @@ def source_index(source):
     # The literal IP is validated before constructing the PowerShell query.
     ipaddress.IPv4Address(source)
     command = f"Get-NetIPAddress -AddressFamily IPv4 | Where-Object IPAddress -eq '{source}' | Select-Object -ExpandProperty InterfaceIndex"
-    result = subprocess.run(['powershell', '-NoProfile', '-Command', command],
+    powershell = Path(os.environ['SystemRoot']) / 'System32/WindowsPowerShell/v1.0/powershell.exe'
+    result = subprocess.run([str(powershell), '-NoProfile', '-Command', command],
                             capture_output=True, text=True, timeout=10, check=True)
     values = result.stdout.split()
     if len(values) != 1:

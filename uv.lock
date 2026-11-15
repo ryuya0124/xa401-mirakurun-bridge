@@ -262,6 +262,15 @@ wheels = [
 ]
 
 [[package]]
+name = "defusedxml"
+version = "0.7.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/0f/d5/c66da9b79e5bdb124974bfe172b4daf3c984ebd9c2a06e2b8a4dc7331c72/defusedxml-0.7.1.tar.gz", hash = "sha256:1bb3032db185915b62d7c6209c5a8792be6a32ab2fedacc84e01b52c51aa3e69", size = 75520, upload-time = "2021-03-08T10:59:26.269Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/07/6c/aa3f2f849e01cb6a001cd8554a88d4c77c5c1a31c95bdf1cf9301e6d9ef4/defusedxml-0.7.1-py2.py3-none-any.whl", hash = "sha256:a352e7e428770286cc899e2542b6cdaedb2b4953ff269a210103ec58f6198a61", size = 25604, upload-time = "2021-03-08T10:59:24.45Z" },
+]
+
+[[package]]
 name = "ecdsa"
 version = "0.19.2"
 source = { registry = "https://pypi.org/simple" }
@@ -649,7 +658,7 @@ wheels = [
 [[package]]
 name = "pydtcpip"
 version = "0.1.0"
-source = { git = "https://github.com/tsukumijima/pydtcpip.git?rev=e726fc548c01701f5949f8a93d47b45b038395df#e726fc548c01701f5949f8a93d47b45b038395df" }
+source = { git = "https://github.com/tsukumijima/pydtcpip.git?rev=0114ed187d86902a879bcd775358cbb0ab917ba7#0114ed187d86902a879bcd775358cbb0ab917ba7" }
 dependencies = [
     { name = "aiohttp" },
     { name = "cryptography" },
@@ -782,6 +791,8 @@ source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
     { name = "ariblib" },
+    { name = "defusedxml" },
+    { name = "multidict" },
     { name = "pydtcpip" },
     { name = "python-dotenv" },
 ]
@@ -794,12 +805,14 @@ test = [
 
 [package.metadata]
 requires-dist = [
-    { name = "aiohttp", specifier = ">=3.12,<4" },
+    { name = "aiohttp", specifier = ">=3.14.5,<4" },
     { name = "ariblib", url = "https://github.com/tsukumijima/ariblib/releases/download/v0.2.0/ariblib-0.2.0-py3-none-any.whl" },
-    { name = "pydtcpip", git = "https://github.com/tsukumijima/pydtcpip.git?rev=e726fc548c01701f5949f8a93d47b45b038395df" },
+    { name = "defusedxml", specifier = ">=0.7.1,<1" },
+    { name = "multidict", specifier = ">=7.2.1,<8" },
+    { name = "pydtcpip", git = "https://github.com/tsukumijima/pydtcpip.git?rev=0114ed187d86902a879bcd775358cbb0ab917ba7" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=8,<10" },
     { name = "pytest-asyncio", marker = "extra == 'test'", specifier = ">=1,<2" },
-    { name = "python-dotenv", specifier = ">=1.1,<2" },
+    { name = "python-dotenv", specifier = ">=1.2.4,<2" },
 ]
 provides-extras = ["test"]
 

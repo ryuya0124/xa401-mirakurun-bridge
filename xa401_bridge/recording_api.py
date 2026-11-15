@@ -9,13 +9,16 @@ def install_recording_routes(app, bridge):
     recorder = bridge.recorder
 
     async def dashboard(request):
-        return web.FileResponse(Path(__file__).with_name('web') / 'recordings.html')
+        return web.FileResponse(Path(__file__).with_name('web') / 'recordings.html', headers={'Cache-Control': 'no-cache'})
 
     async def script(request):
-        return web.FileResponse(Path(__file__).with_name('web') / 'recordings.js')
+        return web.FileResponse(Path(__file__).with_name('web') / 'recordings.js', headers={'Cache-Control': 'no-cache'})
 
     async def original(request):
-        return web.FileResponse(Path(__file__).with_name('web') / 'original.html')
+        return web.FileResponse(Path(__file__).with_name('web') / 'original.html', headers={'Cache-Control': 'no-cache'})
+
+    async def timeline(request):
+        return web.FileResponse(Path(__file__).with_name('web') / 'timeline.mjs', headers={'Cache-Control': 'no-cache'})
 
     async def overview(request):
         return web.json_response({'enabled': recorder.enabled,
@@ -63,6 +66,7 @@ def install_recording_routes(app, bridge):
     app.router.add_get('/api/xa401/recordings', dashboard)
     app.router.add_get('/api/xa401/original', original)
     app.router.add_get('/xa401/recordings.js', script)
+    app.router.add_get('/xa401/timeline.mjs', timeline)
     app.router.add_get('/xa401/api/recording', overview)
     app.router.add_get('/xa401/api/recorded', recorded)
     app.router.add_post('/xa401/api/jobs', create)

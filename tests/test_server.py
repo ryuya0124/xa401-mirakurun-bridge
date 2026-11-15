@@ -81,6 +81,11 @@ async def test_recording_dashboard_json_jobs_cancel_and_restricted_download(monk
         assert (await client.get('/xa401/recordings')).status == 200
         assert (await client.get('/api/xa401/recordings')).status == 200
         assert (await client.get('/api/xa401/original')).status == 200
+        navigation = {'Sec-Fetch-Site': 'cross-site', 'Sec-Fetch-Mode': 'navigate',
+                      'Sec-Fetch-Dest': 'document'}
+        assert (await client.get('/api/xa401/recordings', headers=navigation)).status == 200
+        assert (await client.get('/xa401/api/recording', headers=navigation)).status == 403
+        assert (await client.post('/xa401/api/jobs', json={'service_id': 123}, headers=navigation)).status == 403
         assert (await (await client.get('/xa401/api/recording')).json())['enabled']
         assert await (await client.get('/xa401/api/recorded')).json() == []
         assert (await client.post('/xa401/api/jobs', data='form')).status == 415

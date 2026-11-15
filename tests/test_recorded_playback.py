@@ -1,4 +1,7 @@
 from types import SimpleNamespace
+from pathlib import Path
+import hashlib
+import json
 
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
@@ -14,6 +17,13 @@ def test_seek_model_matches_upstream_dtcp_header_contract():
     assert DTCPClient._request_headers(None, time_range=selected)['TimeSeekRange.dlna.org'] == 'npt=600.125-'
     assert seek_for_key(123) is None
     assert seek_for_key('recorded:' + 'a' * 24 + '@0#' + 'b' * 32) is None
+
+
+def test_pinned_player_assets_match_reviewed_upstream_bytes():
+    root = Path(__file__).parents[1] / 'xa401_bridge/web/player-lib'
+    manifest = json.loads((root / 'SOURCE.json').read_text(encoding='utf-8'))
+    for name, expected in manifest['files_sha256'].items():
+        assert hashlib.sha256((root / name).read_bytes()).hexdigest() == expected
 
 
 async def test_direct_recorded_playback_selects_known_source_and_time_without_files(tmp_path):

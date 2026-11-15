@@ -80,6 +80,19 @@
       gap: 22px;
       flex-wrap: wrap;
     }
+    input[type="range"] {
+      padding: 4px 0;
+      height: 36px;
+      accent-color: #e64f97;
+    }
+    #playback:fullscreen {
+      overflow-y: auto;
+      margin: 0;
+      border-radius: 0;
+    }
+    #playback:fullscreen video {
+      max-height: 72vh;
+    }
     @media (max-width: 480px) {
       body {
         padding: 12px;
@@ -94,8 +107,8 @@
   </style>
   <h1>XA401 録画管理</h1>
   <nav>
-    <a href="/api/xa401/original">テレビ視聴</a><a href="/videos/">KonomiTVの録画一覧</a
-    ><a href="#jobs">PCの録画・予約</a>
+    <a href="/api/xa401/original">テレビ視聴</a
+    ><a href="/videos/">KonomiTVの録画一覧</a><a href="#jobs">PCの録画・予約</a>
   </nav>
   <p class="muted">
     放送のPC録画・予約と、XA401内の録画の直接再生を利用できます。
@@ -132,11 +145,26 @@
   </section>
   <section id="playback" hidden>
     <h2 id="playing-title">XA401から直接再生</h2>
-    <video id="video" controls playsinline style="width: 100%"></video>
-    <label for="position">再生開始位置（分）</label
-    ><input id="position" type="number" min="0" value="0" step="0.5" />
-    <button id="seek">指定位置から再生</button
-    ><button id="stop-player">再生を終了</button>
+    <video id="video" playsinline style="width: 100%"></video>
+    <label for="timeline">再生位置</label>
+    <input
+      id="timeline"
+      type="range"
+      min="0"
+      max="0"
+      value="0"
+      step="1"
+      disabled
+    />
+    <output id="clock">0:00 / 時間未取得</output>
+    <div>
+      <button id="toggle-play">再生</button><button id="backward">−10秒</button
+      ><button id="forward">＋30秒</button
+      ><button id="fullscreen">全画面</button
+      ><button id="stop-player">再生を終了</button>
+    </div>
+    <label for="volume">音量</label
+    ><input id="volume" type="range" min="0" max="1" value="1" step="0.05" />
     <p class="muted">
       XA401から直接読み出します。PCへの事前保存やサーバー側の再圧縮は行いません。ブラウザー内で表示用の変換を行います。
     </p>
@@ -150,5 +178,5 @@
     <h2>PCの録画・予約</h2>
     <div id="job-list"></div>
   </section>
-  <script type="module" src="/xa401/recordings.js"></script>
+  <script type="module" src="/xa401/recordings.js?v=20261115-2"></script>
 </html>

@@ -15,7 +15,9 @@ document.getElementById('open').onclick = () => {
         const settings = JSON.parse(localStorage.getItem(key) || '{}');
         if (settings === null || typeof settings !== 'object' || Array.isArray(settings)) throw new Error();
         Object.assign(settings, {tv_streaming_quality: 'original', tv_streaming_quality_cellular: 'original',
-            tv_data_saver_mode: false, tv_data_saver_mode_cellular: false});
+            tv_data_saver_mode: false, tv_data_saver_mode_cellular: false,
+            video_streaming_quality: 'original', video_streaming_quality_cellular: 'original',
+            video_data_saver_mode: false, video_data_saver_mode_cellular: false});
         localStorage.setItem(key, JSON.stringify(settings));
         location.assign('/tv/watch/gr011');
     } catch (_) {

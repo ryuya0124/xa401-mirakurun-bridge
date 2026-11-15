@@ -19,6 +19,15 @@ def hostname(authority):
 
 
 def browser_origin(request):
+    navigation = (request.method == 'GET' and
+        request.headers.get('Sec-Fetch-Mode') == 'navigate' and
+        request.headers.get('Sec-Fetch-Dest') == 'document')
+    api_path = request.path.startswith(('/api/', '/xa401/api/'))
+    html_entry = request.path in ('/api/xa401/recordings', '/api/xa401/original')
+    if navigation and (not api_path or html_entry):
+        # A person following a link is a legitimate top-level navigation. Keep
+        # cross-site fetches and all state-changing requests behind the checks.
+        return
     if request.headers.get('Sec-Fetch-Site') == 'cross-site':
         raise web.HTTPForbidden(text='Cross-site requests are not allowed')
     origin = request.headers.get('Origin')

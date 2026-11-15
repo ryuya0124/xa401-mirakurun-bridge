@@ -1,4 +1,5 @@
-import { Mpeg2TsPlayer } from "/xa401/player-lib/index.js";
+import { Mpeg2TsPlayer } from "/xa401/player-lib/index.js?rev=9cde78d";
+import { RecordingTimeline, durationSeconds, clock } from "/xa401/timeline.mjs?v=20261115-2";
 const $ = (id) => document.getElementById(id);
 let state = {},
   loaded = false;
@@ -142,37 +143,105 @@ $("live").onsubmit = async (e) => {
 let player = null,
   selected = null,
   playerId = crypto.randomUUID().replaceAll("-", "");
+let timeline = null,
+  dragging = false,
+  generation = 0,
+  readyGeneration = 0;
+function showPosition(value) {
+  if (!timeline) return;
+  if (!dragging) $("timeline").value = String(value);
+  $("clock").textContent =
+    clock(value) +
+    " / " +
+    (timeline.duration ? clock(timeline.duration) : "時間未取得");
+}
 async function playRecorded(r, position = 0) {
+  const current = ++generation;
+  readyGeneration = 0;
   if (player) player.destroy();
   selected = r;
+  timeline = new RecordingTimeline(durationSeconds(r.duration), position);
+  $("timeline").max = String(timeline.duration || 0);
+  $("timeline").disabled = !timeline.duration;
   $("playback").hidden = false;
   $("playing-title").textContent = r.title;
-  $("position").value = (position / 60).toFixed(1);
-  player = new Mpeg2TsPlayer($("video"), {
+  showPosition(timeline.offset);
+  const instance = new Mpeg2TsPlayer($("video"), {
     mediaSource: "auto",
     passthrough: false,
   });
-  player.addEventListener("error", (e) =>
-    message("再生エラー: " + e.detail.error.message),
-  );
+  player = instance;
+  instance.addEventListener("error", (e) => {
+    if (generation === current)
+      message("再生エラー: " + e.detail.error.message);
+  });
   try {
     message("XA401に接続しています…");
-    await player.load(
-      `/xa401/api/recorded/${r.id}/stream?player=${playerId}&position=${position}`,
+    await instance.load(
+      `/xa401/api/recorded/${r.id}/stream?player=${playerId}&position=${timeline.offset}`,
     );
+    if (generation !== current) return;
+    readyGeneration = current;
     message("XA401から直接再生中");
     await $("video").play();
   } catch (e) {
-    message(
-      "再生を開始できませんでした。画面の再生ボタン、または再生のやり直しをお試しください。",
-    );
+    if (generation === current)
+      message(
+        "再生を開始できませんでした。再生ボタン、または位置を選び直してお試しください。",
+      );
   }
 }
-$("seek").onclick = () => {
-  if (selected)
-    playRecorded(selected, Math.max(0, Number($("position").value) * 60));
+$("video").addEventListener("playing", () => {
+  if (timeline && readyGeneration === generation)
+    timeline.start($("video").currentTime);
+  $("toggle-play").textContent = "一時停止";
+});
+$("video").addEventListener("pause", () => {
+  $("toggle-play").textContent = "再生";
+});
+$("video").addEventListener("timeupdate", () => {
+  if (timeline && readyGeneration === generation && !dragging)
+    showPosition(timeline.position($("video").currentTime));
+});
+$("video").addEventListener("ended", () => {
+  if (timeline) showPosition(timeline.duration);
+});
+$("timeline").onpointerdown = () => {
+  dragging = true;
 };
+$("timeline").oninput = () => {
+  dragging = true;
+  showPosition(Number($("timeline").value));
+};
+$("timeline").onchange = () => {
+  dragging = false;
+  if (selected && timeline)
+    playRecorded(selected, timeline.target($("timeline").value));
+};
+$("toggle-play").onclick = async () => {
+  try {
+    if ($("video").paused) await $("video").play();
+    else $("video").pause();
+  } catch (_) {
+    if (selected && timeline)
+      playRecorded(selected, timeline.position($("video").currentTime));
+  }
+};
+function skip(delta) {
+  if (selected && timeline)
+    playRecorded(
+      selected,
+      timeline.target(timeline.position($("video").currentTime) + delta),
+    );
+}
+$("backward").onclick = () => skip(-10);
+$("forward").onclick = () => skip(30);
+$("volume").oninput = () => {
+  $("video").volume = Number($("volume").value);
+};
+$("fullscreen").onclick = () => $("playback").requestFullscreen?.();
 $("stop-player").onclick = () => {
+  ++generation;
   if (player) player.destroy();
   player = null;
   $("playback").hidden = true;
@@ -204,3 +273,14 @@ $("load-recorded").onclick = async () => {
 };
 refresh();
 setInterval(refresh, 5000);
+
+// Preserve original-quality playback when entering KonomiTV's saved videos.
+document.querySelector('a[href="/videos/"]').addEventListener("click", e => {
+  try {
+    const key = "KonomiTV-Settings";
+    const settings = JSON.parse(localStorage.getItem(key) || "{}");
+    if (!settings || typeof settings !== "object" || Array.isArray(settings)) throw Error();
+    Object.assign(settings, {video_streaming_quality: "original", video_streaming_quality_cellular: "original", video_data_saver_mode: false, video_data_saver_mode_cellular: false});
+    localStorage.setItem(key, JSON.stringify(settings));
+  } catch (_) { e.preventDefault(); message("画質設定を保存できませんでした。KonomiTVの設定でOriginalを選んでください。"); }
+});

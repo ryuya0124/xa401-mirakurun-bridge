@@ -6,3 +6,4 @@
 *.html text eol=lf
 xa401_bridge/web/player-lib/LICENSE text eol=lf
 *.conf.example text eol=lf
+*.patch text eol=lf

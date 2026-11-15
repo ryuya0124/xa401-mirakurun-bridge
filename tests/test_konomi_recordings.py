@@ -57,7 +57,20 @@ def test_merge_pagination_search_and_ids_keep_native_programmes():
 
 async def test_readonly_provider_detail_and_failures_do_not_mutate_stb(tmp_path):
     device = SimpleNamespace(recordings={'a'*24:item()}, recordings_updated=time.time())
-    bridge = SimpleNamespace(config={'udn':'uuid:own'}, device=device)
+    async def resource(token):
+        assert token == 'a'*24
+        return SimpleNamespace(url='http://192.168.1.50/known-recording')
+    device.recorded_resource = resource
+    class Response:
+        status = 200
+        headers = {'TimeSeekRange.dlna.org': 'npt=0.000-1812.309/1812.309'}
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+    def head(url, **kwargs):
+        assert url == 'http://192.168.1.50/known-recording'
+        assert kwargs['allow_redirects'] is False
+        return Response()
+    bridge = SimpleNamespace(config={'udn':'uuid:own'}, device=device, http=SimpleNamespace(head=head))
     app = web.Application()
     install_konomi_recording_routes(app, bridge)
     ident = video_id('uuid:own', 'a'*24)

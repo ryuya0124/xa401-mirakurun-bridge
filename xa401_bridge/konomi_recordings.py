@@ -109,6 +109,34 @@ class KonomiRecordings:
         self.lock = asyncio.Lock()
         self.native_cache = None
         self.native_at = 0
+        self.precise_durations = {}
+
+    async def precise_detail(self, program):
+        """Read the fractional total from a fresh, identity-checked HEAD (no AKE)."""
+        token = program['external_playback']['stream_url'].split('/')[-2]
+        duration = self.precise_durations.get(token)
+        if duration is None:
+            resource = await self.bridge.device.recorded_resource(token)
+            async with self.bridge.http.head(resource.url, allow_redirects=False,
+                    headers={'TimeSeekRange.dlna.org': 'npt=0.000-',
+                        'getcontentFeatures.dlna.org': '1', 'transferMode.dlna.org': 'Streaming',
+                        'Accept-Encoding': 'identity'}, timeout=aiohttp.ClientTimeout(total=8)) as response:
+                if response.status != 200:
+                    raise web.HTTPBadGateway(text='XA401 recording metadata probe failed')
+                value = response.headers.get('TimeSeekRange.dlna.org', '')
+            match = re.fullmatch(r'npt=[0-9.]+-[0-9.]+/([0-9]+(?:\.[0-9]+)?)(?:\s.*)?', value)
+            if not match or not 0 < float(match[1]) <= 86400:
+                raise web.HTTPBadGateway(text='XA401 did not return the complete recording duration')
+            duration = float(match[1])
+            # Bound cache to the current read-only catalogue.
+            self.precise_durations = {key: value for key, value in self.precise_durations.items()
+                if key in self.bridge.device.recordings}
+            self.precise_durations[token] = duration
+        program['duration'] = program['recorded_video']['duration'] = duration
+        program['external_playback']['duration'] = duration
+        end = (datetime.fromisoformat(program['start_time']) + timedelta(seconds=duration)).isoformat()
+        program['end_time'] = program['recorded_video']['recording_end_time'] = end
+        return program
 
     async def remote(self):
         if time.time() - self.bridge.device.recordings_updated > 60:
@@ -173,7 +201,7 @@ def install_konomi_recording_routes(app, bridge):
             if ident not in remote:
                 raise web.HTTPNotFound(text='External recording is unavailable')
             if len(parts) == 1:
-                return web.json_response(remote[ident], headers={'Cache-Control': 'no-store'})
+                return web.json_response(await provider.precise_detail(remote[ident]), headers={'Cache-Control': 'no-store'})
             if parts[1] in ('thumbnail', 'thumbnail-tile'):
                 # Honest placeholder, not an invented programme image.
                 return web.Response(text='<svg xmlns="http://www.w3.org/2000/svg" width="480" height="270"><rect width="480" height="270" fill="#30221f"/><text x="240" y="135" text-anchor="middle" fill="#dbb" font-size="28">XA401</text></svg>',

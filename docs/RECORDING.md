@@ -21,5 +21,47 @@ DLNA TimeSeekRangeを使用する。HTTP byte Range対応とは区別する。
 Media Sessionに録画タイトル・固定総時間・現在位置を渡し、OS側のシーク操作も受け付ける。
 これらのコード／世代競合テストは成功。スマホOS上の表示・ちらつきの実確認は未了。
 
-XA401録画をKonomiTV標準録画一覧・標準プレイヤーへ統合する作業は継続中。
-現状の独立管理画面を、標準UI統合済みとは扱わない。
+## KonomiTV標準の録画一覧・プレイヤー
+
+標準の `/videos/` にXA401録画を合流させる任意の連携を実装した。
+独立アプリの `konomi_recordings.py` が一覧・検索・ページング・安定IDを提供し、
+`web/native-player.mjs` がNPTをMSEの時間軸へ接続する。
+KonomiTVは既存の一覧、DPlayer、シークバー、字幕、Media Sessionを使う。
+video要素・MediaSource・Workerをシークごとに取り替えない。
+録画の実体をKonomiTVのDBへ登録したり、ダミーTSを作ったりしない。
+
+KonomiTVクライアントには、外部ソース用の小さなフックが必要。
+対応元はMITの `2774e39e512b5f3dfd423fdfc8a7602e92e844f5`。
+配布するのは3ソースファイルへの差分で、本体・ビルド済み成果物は非同梱。
+
+```sh
+python deploy/install_konomi_integration.py /path/to/KonomiTV
+python deploy/install_konomi_integration.py /path/to/KonomiTV --apply
+cd /path/to/KonomiTV/client
+npx --yes yarn@1.22.22 install --frozen-lockfile --non-interactive
+npx --yes yarn@1.22.22 build
+```
+
+適用スクリプトは対応HEADと `git apply --check` を検査し、既存の競合を上書きしない。
+`--revert` でソース差分を取り消せる。取消後もクライアントを再ビルドする。
+サーバーソース・DBの変更や、サーバー再起動は不要。
+BridgeのLAN HTTPS入口を経由して開く必要がある。
+KonomiTVの7000番／7010番へ直結した要求には、Bridgeの録画一覧合流は適用されない。
+既存PWAには更新通知が出るため、更新を適用してから開き直す。
+
+実環境ではXA401の144件とPC保存済み1件の計145件を合流。
+ヘッドレスChromiumで標準一覧から実機録画を選び、0・600・1790・300秒で
+実映像のデコード、固定総時間、同一video／MediaSourceを確認した。
+単体エンジンでも同じWorkerの維持を確認。Media Sessionのtitleと録画名が一致した。
+スマホの実通知と操作感の確認は利用者側で未了。画面テストのWake Lock拒否は
+ヘッドレス環境の権限制約で、再生・シークのエラーではなかった。
+
+DTCP_MPEG_TS_JP_TはTS形式の宣言であり、実測した映像コーデックとは扱わない。
+未測定の音声形式・映像プロファイル・fpsなどは「未取得」。無料放送区分はnull。
+ファイルハッシュを捏造しない。容量はDIDLの元ストリーム宣言値（未取得なら0）で、
+PCに保存した188バイトTSの計測値ではない。現在の表示エンジンはMPEG-2向けで、
+別コーデックはエラーにし、サーバー側の別画質へ黙って切り替えない。
+サムネイルはXA401と記したプレースホルダー。個別番組の画像・タイルは未取得。
+外部録画の削除、再解析、オフライン保存、ファイルダウンロードは無効化し、
+APIでも書込みを拒否する。視聴履歴・タグ等の全機能互換は保証していない。
+合流一覧の取得時はXA401とKonomiTV両方への接続が必要で、失敗を0件に置き換えない。

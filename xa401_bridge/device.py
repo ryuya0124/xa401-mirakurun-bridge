@@ -259,7 +259,8 @@ class Device:
 
     def recorded_summaries(self):
         return [{'id': key, 'title': item.title, 'channel': item.channel_name,
-                 'date': item.date, 'duration': item.duration}
+                 'date': item.date, 'duration': (item.original_resource.attributes.get('duration')
+                    if item.original_resource else None) or item.duration}
                 for key, item in self.recordings.items()]
 
     async def recorded_resource(self, token):

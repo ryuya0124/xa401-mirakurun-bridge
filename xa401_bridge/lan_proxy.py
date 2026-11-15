@@ -5,6 +5,7 @@ Keeps the Mirakurun receiver API on loopback and leaves system routes/VPN alone.
 import asyncio
 import ipaddress
 import os
+import re
 import socket
 import ssl
 
@@ -67,9 +68,17 @@ async def start_proxy(config, index):
         return await handler(request)
 
     async def proxy(request):
-        management = request.path.startswith(('/xa401/', '/api/xa401/'))
+        native_recordings = re.fullmatch(r'/api/videos(?:/(.*))?/?', request.path)
+        tail = native_recordings.group(1) if native_recordings else None
+        external = bool(native_recordings and (
+            request.path.rstrip('/') == '/api/videos' or tail == 'search' or
+            (tail and tail.split('/')[0].isdigit() and int(tail.split('/')[0]) >= (1 << 48))))
+        management = external or request.path.startswith(('/xa401/', '/api/xa401/'))
         backend = f'http://127.0.0.1:{int(config.get("bridge_port", 40772))}' if management else upstream
-        target = backend + request.raw_path
+        raw_path = request.raw_path
+        if external:
+            raw_path = '/api/xa401/konomi/videos' + raw_path[len('/api/videos'):]
+        target = backend + raw_path
         headers = headers_without_hop(request.headers)
         headers.popall('Host', None)
         for key in list(headers):

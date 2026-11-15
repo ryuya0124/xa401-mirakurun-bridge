@@ -53,7 +53,7 @@ general:
 | `/health` | 受信状態・認証完了回数・配信バイト数 |
 | `/xa401/current-program-titles` | DMSで観測した現在の番組名。時刻未確定 |
 
-- Mirakurun全APIの代替ではありません。録画予約・Move・ダビング・資格情報抽出・有効化は実装しません。
+- Mirakurun全APIの代替ではありません。PCの日時指定録画・予約とXA401録画の直接再生に対応します。STBへの録画予約・削除・Move・ダビング・資格情報抽出・有効化は実装しません。[録画とKonomiTV標準UIへの連携](docs/RECORDING.md)。
 - 異なる原画質2局の同時受信を実機確認しました。設定例の`max_streams`は2、省略した旧設定は1。同一局の複数視聴は受信を共有し、1局視聴中はもう1枠で番組情報を収集できます。2局視聴中の第3局要求は503です。物理チューナー数とは別です。[仕様と実測](docs/CONCURRENCY.md)。
 - 既定の`mobile1`はXA401で変換済みのH.264 720pです。元画質は`quality: original`で選択できますが、対応は実測を確認してください。
 - XA401の部分TSにはEITがなくても、SITに現在番組の情報が含まれます。CRC・NID/TSID/SIDを照合し、実際の開始時刻・放送時間・イベントIDをKonomiTVへ渡します。`epg_collection.enabled`で空き時間の各局収集を有効にできます。視聴要求が来たら収集を中断し、視聴を優先します。未来・週間の番組表は取得しません。[収集の設定と制約](docs/EPG.md)。KonomiTVの更新間隔は0.5分を推奨し、取得後の初回反映に最大30秒程度かかる場合があります。
@@ -79,6 +79,6 @@ SITのARIB記述子・文字列はariblib 0.2.0（MIT、公開wheelを固定）�
 
 ## コード構成とセキュリティ
 
-探索・XMLはdevice.py、DTCP受信はreceiver.py、受信の共有単位はsession.py、2枠管理と互換APIはserver.py、SIT解析とキャッシュはepg.py、収集はcollector.py、HTTPS中継はlan_proxy.py、Host/Origin検査はhttp_security.pyに分離しています。配備用コードはdeploy/、検査はtests/です。
+探索・XMLはdevice.py、DTCP受信はreceiver.py、受信の共有単位はsession.py、2枠管理と互換APIはserver.py、SIT解析とキャッシュはepg.py、収集はcollector.py、HTTPS中継はlan_proxy.py、Host/Origin検査はhttp_security.pyに分離しています。PC録画はrecording.py／ts_file.py、管理APIはrecording_api.py、XA401直接再生はrecorded_playback.py、標準録画UIへの変換はkonomi_recordings.py、ブラウザー側の時間ソースはweb/native-player.mjsです。配備用コードはdeploy/、検査はtests/です。
 
 依存はuv.lockで固定し、CIでも同じロックを使用します。最新版でも未修正のecdsaリスク1件が残ります。[監査結果と残る制約](SECURITY.md)を確認してください。

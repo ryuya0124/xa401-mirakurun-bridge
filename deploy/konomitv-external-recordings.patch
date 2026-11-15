@@ -1,0 +1,163 @@
+diff --git a/client/src/components/Videos/RecordedProgram.vue b/client/src/components/Videos/RecordedProgram.vue
+index 6c87ee5..753e822 100644
+--- a/client/src/components/Videos/RecordedProgram.vue
++++ b/client/src/components/Videos/RecordedProgram.vue
+@@ -62,6 +62,9 @@
+                             :src="`${Utils.api_base_url}/channels/${program.channel.id}/logo`">
+                         <span class="recorded-program__content-meta-broadcaster-name">Ch: {{program.channel.channel_number}} {{program.channel.name}}</span>
+                     </div>
++                    <div class="recorded-program__content-meta-broadcaster" v-else-if="program.external_playback">
++                        <span class="recorded-program__content-meta-broadcaster-name">{{program.external_playback.provider}} から直接再生</span>
++                    </div>
+                     <div class="recorded-program__content-meta-broadcaster" v-else>
+                         <span class="recorded-program__content-meta-broadcaster-name">チャンネル情報なし</span>
+                     </div>
+@@ -139,7 +142,7 @@
+                         </div>
+                     </template>
+                     <v-list density="compact" bg-color="background-lighten-1" class="recorded-program__menu-list">
+-                        <v-list-item @click="showOfflineDownload = true" :disabled="program.recorded_video.status === 'Recording'">
++                        <v-list-item @click="showOfflineDownload = true" :disabled="program.recorded_video.status === 'Recording' || program.external_playback !== undefined">
+                             <template v-slot:prepend>
+                                 <Icon icon="fluent:cloud-arrow-down-20-regular" width="20px" height="20px" />
+                             </template>
+@@ -159,26 +162,26 @@
+                             </template>
+                             <v-list-item-title class="ml-3">録画ファイル情報を表示</v-list-item-title>
+                         </v-list-item>
+-                        <v-list-item @click="downloadVideo" :disabled="program.recorded_video.status === 'Recording'">
++                        <v-list-item @click="downloadVideo" :disabled="program.recorded_video.status === 'Recording' || program.external_playback !== undefined">
+                             <template v-slot:prepend>
+                                 <Icon icon="fluent:arrow-download-24-regular" width="20px" height="20px" />
+                             </template>
+                             <v-list-item-title class="ml-3">録画ファイル本体をダウンロード ({{ Utils.formatBytes(program.recorded_video.file_size) }})</v-list-item-title>
+                         </v-list-item>
+-                        <v-list-item @click="reanalyzeVideo" v-ftooltip="'再生時に必要な録画ファイル情報・番組情報・サムネイルなどをすべて再解析・再生成します（数分かかります）'">
++                        <v-list-item @click="reanalyzeVideo" :disabled="program.external_playback?.read_only" v-ftooltip="'再生時に必要な録画ファイル情報・番組情報・サムネイルなどをすべて再解析・再生成します（数分かかります）'">
+                             <template v-slot:prepend>
+                                 <Icon icon="fluent:book-arrow-clockwise-20-regular" width="20px" height="20px" />
+                             </template>
+                             <v-list-item-title class="ml-3">メタデータを再解析</v-list-item-title>
+                         </v-list-item>
+-                        <v-list-item @click="regenerateThumbnail()" v-ftooltip="'サムネイルのみを再生成します（数分かかります） 変更はページを再読み込みすると反映されます'">
++                        <v-list-item @click="regenerateThumbnail()" :disabled="program.external_playback?.read_only" v-ftooltip="'サムネイルのみを再生成します（数分かかります） 変更はページを再読み込みすると反映されます'">
+                             <template v-slot:prepend>
+                                 <Icon icon="fluent:image-arrow-counterclockwise-24-regular" width="20px" height="20px" />
+                             </template>
+                             <v-list-item-title class="ml-3">サムネイルを再生成</v-list-item-title>
+                         </v-list-item>
+                         <v-divider></v-divider>
+-                        <v-list-item @click="showDeleteConfirmation" :disabled="program.recorded_video.status === 'Recording'" class="recorded-program__menu-list-item--danger">
++                        <v-list-item @click="showDeleteConfirmation" :disabled="program.recorded_video.status === 'Recording' || program.external_playback?.read_only" class="recorded-program__menu-list-item--danger">
+                             <template v-slot:prepend>
+                                 <Icon icon="fluent:delete-20-regular" width="20px" height="20px" />
+                             </template>
+diff --git a/client/src/services/Videos.ts b/client/src/services/Videos.ts
+index 162bd33..a921874 100644
+--- a/client/src/services/Videos.ts
++++ b/client/src/services/Videos.ts
+@@ -22,15 +22,15 @@ export interface IRecordedVideo {
+     recording_end_time: string | null;
+     duration: number;
+     container_format: 'MPEG-TS' | 'MPEG-4';
+-    video_codec: 'MPEG-2' | 'H.264' | 'H.265';
+-    video_codec_profile: 'High' | 'High 10' | 'Main' | 'Main 10' | 'Baseline' | 'Constrained Baseline';
+-    video_scan_type: 'Interlaced' | 'Progressive';
++    video_codec: 'MPEG-2' | 'H.264' | 'H.265' | '未取得';
++    video_codec_profile: 'High' | 'High 10' | 'Main' | 'Main 10' | 'Baseline' | 'Constrained Baseline' | '未取得';
++    video_scan_type: 'Interlaced' | 'Progressive' | '未取得';
+     video_frame_rate: number;
+     video_resolution_width: number;
+     video_resolution_height: number;
+     has_video_stream_changes: boolean;
+-    primary_audio_codec: 'AAC-LC' | 'HE-AAC';
+-    primary_audio_channel: 'Monaural' | 'Stereo' | '5.1ch';
++    primary_audio_codec: 'AAC-LC' | 'HE-AAC' | '未取得';
++    primary_audio_channel: 'Monaural' | 'Stereo' | '5.1ch' | '未取得';
+     primary_audio_sampling_rate: number;
+     secondary_audio_codec: 'AAC-LC' | 'HE-AAC' | null;
+     secondary_audio_channel: 'Monaural' | 'Stereo' | '5.1ch' | null;
+@@ -103,6 +103,15 @@ export const IRecordedVideoDefault: IRecordedVideo = {
+ 
+ /** 録画番組情報を表すインターフェース */
+ export interface IRecordedProgram {
++    /** Optional read-only recording provider; the receiver runs independently. */
++    external_playback?: {
++        module_url: string;
++        stream_url: string;
++        duration: number;
++        provider: string;
++        read_only: boolean;
++        original_available: boolean;
++    };
+     id: number;
+     recorded_video: IRecordedVideo;
+     recording_start_margin: number;
+@@ -123,7 +132,7 @@ export interface IRecordedProgram {
+     start_time: string;
+     end_time: string;
+     duration: number;
+-    is_free: boolean;
++    is_free: boolean | null;
+     genres: { major: string; middle: string; }[];
+     primary_audio_type: string;
+     primary_audio_language: string;
+diff --git a/client/src/services/player/PlayerController.ts b/client/src/services/player/PlayerController.ts
+index 188b8a8..ee49dbd 100644
+--- a/client/src/services/player/PlayerController.ts
++++ b/client/src/services/player/PlayerController.ts
+@@ -355,7 +355,22 @@ class PlayerController {
+         // DPlayer が mpegts.js / hls.js / mpeg2toh264 を検出できるように、実行時ライブラリを window 直下へ公開する
+         (window as any).mpegts = mpegts;
+         (window as any).Hls = Hls;
+-        Object.assign(window, {mpeg2toh264: {Mpeg2TsPlayer, Deinterlacer}});
++        // An optional external provider adapts time-addressed network recordings.
++        // The standard DPlayer, video element, timeline and MediaSession stay in use.
++        const external_playback = this.playback_mode === 'Video' ? player_store.recorded_program.external_playback : undefined;
++        let source_player_class = Mpeg2TsPlayer;
++        if (external_playback !== undefined) {
++            if (external_playback.original_available !== true) {
++                throw new Error('この外部録画のオリジナル形式はまだ再生に対応していません。');
++            }
++            const module_url = new URL(external_playback.module_url, location.origin);
++            if (module_url.origin !== location.origin || module_url.pathname.endsWith('.mjs') === false) {
++                throw new Error('Invalid external recording player module.');
++            }
++            const provider = await import(/* @vite-ignore */ module_url.href);
++            source_player_class = provider.createPlayerClass(Mpeg2TsPlayer, external_playback);
++        }
++        Object.assign(window, {mpeg2toh264: {Mpeg2TsPlayer: source_player_class, Deinterlacer}});
+ 
+         // DPlayer を初期化
+         this.player = new DPlayer({
+@@ -501,18 +516,20 @@ class PlayerController {
+                     const is_original_quality_available = (
+                         recorded_video.status != 'Recording' &&
+                         recorded_video.container_format === 'MPEG-TS' &&
+-                        recorded_video.video_codec === 'MPEG-2'
++                        (recorded_video.video_codec === 'MPEG-2' || external_playback?.original_available === true)
+                     );
+                     if (is_original_quality_available === true) {
+                         // オリジナル画質は常に画質リストの先頭に追加する
+                         qualities.push({
+-                            name: 'Original (MPEG-2)',
++                            name: external_playback !== undefined ? `Original (${external_playback.provider})` : 'Original (MPEG-2)',
+                             type: 'mpeg2toh264',
+                             url: `${Utils.api_base_url}/videos/${player_store.recorded_program.id}/download`,
+                         });
+                     }
+                     // 画質リストを作成
+                     for (const quality_name of VIDEO_STREAMING_QUALITIES) {
++                        // The external receiver exposes its stored quality only.
++                        if (external_playback !== undefined) continue;
+                         // 画質ごとに異なるセッション ID を生成 (セッション ID は UUID の - で区切って一番左側のみを使う)
+                         const session_id = crypto.randomUUID().split('-')[0];
+                         // 画質設定を追加
+@@ -549,6 +566,7 @@ class PlayerController {
+                         }
+                     }
+ 
++                    if (external_playback !== undefined) default_quality = qualities[0].name;
+                     const tile_info = player_store.recorded_program.recorded_video.thumbnail_info?.tile ?? null;
+                     return {
+                         quality: qualities,

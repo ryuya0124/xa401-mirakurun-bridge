@@ -42,6 +42,48 @@ python deploy/start_stack.py --config config.json --konomitv /path/to/KonomiTV -
 
 このPCだけで視聴するときは`http://127.0.0.77:7010/xa401-original.html`が入口です。127/8のloopbackを使用し、LANへ平文HTTPを公開しません。HTTPS入口は`https://localhost:7000/xa401-original.html`ですが、自己署名証明書のためブラウザーの警告があります。証明書警告を自動で無視する設定は行いません。
 
+## スマホのブラウザーから接続する
+
+受信・認証・復号を行うのはPCです。スマホではKonomiTVの画面を開くだけで、AndroidのDTCP受信アプリを経由しません。
+
+1. `add_lan_certificate.py --runtime /path/to/runtime --ip PC_LAN_IP`でローカル証明書にLAN IPを追加し、自分で導入したKonomiTVを再起動する。
+2. Windowsでファイアウォールに遮断される場合、管理者PowerShellで次を実行する。実行ファイル・ローカルIP・TCP 7000・指定したLANだけを許可する。
+
+```powershell
+./deploy/enable_lan_windows.ps1 -KonomiTVRoot C:/path/to/KonomiTV -LanAddress 192.168.1.10 -RemoteSubnets '192.168.1.0/24'
+```
+
+3. 同じLANのスマホで`https://PC_LAN_IP:7000/xa401-original.html`を開く。ローカル発行の証明書なので初回に信頼警告がある。OSの信頼済み証明書を自動で書き換える処理はない。
+4. Originalを選択して視聴する。端末・ブラウザーのMPEG-2表示変換への対応は実機で確認する。
+
+PCのIPが変わった場合、証明書とファイアウォールのローカルIPも確認してください。同名ルールは、このセットアップのGroupに属するものだけを更新します。Bridgeの40772や内部HTTPの7010をLANへ開放する必要はありません。ルーターのポート転送も不要です。
+
+### WindowsのVPN経路競合がある場合
+
+通常のAkebiの入口はシステムの応答経路を使います。今回のWindowsではTailscaleにLANと同じサブネットの優先経路があり、ルールを追加した後も別端末からの接続がタイムアウトしました。ファイアウォールだけが原因と確定したわけではありません。
+
+システムのルートやVPNを変更しない代替として、Bridgeに**LANインターフェースを指定したHTTPSフロントエンド**を追加しました。設定例：
+
+```json
+"lan_https": {
+  "listen": "192.168.1.10",
+  "port": 7443,
+  "allowed_subnets": ["192.168.1.0/24"],
+  "certificate": "/private/runtime/tls/localhost.crt",
+  "private_key": "/private/runtime/tls/localhost.key"
+}
+```
+
+`listen`はBridgeの`source`と同じPC LANアドレスにします。Windowsでは待受ソケットにも`IP_UNICAST_IF`を指定します。元の映像・音声データを再圧縮せず、HTTPストリーミング・SSE・WebSocketをローカルのKonomiTV（固定の`127.0.0.77:7010`）へ中継します。任意のURLへ転送するオープンプロキシではありません。許可したプライベートサブネット以外はアプリ側でも拒否します。
+
+この場合のスマホ入口は`https://PC_LAN_IP:7443/xa401-original.html`です。ファイアウォールは7443番と実際のPython実行ファイルへ限定します。Windowsのvenvランチャーと、ソケットを持つベースPythonが異なるため、`sys._base_executable`で確認した実行ファイルを指定してください。
+
+```powershell
+./deploy/enable_lan_windows.ps1 -ProgramPath C:/path/to/base/python.exe -Port 7443 -LanAddress 192.168.1.10 -RemoteSubnets '192.168.1.0/24'
+```
+
+アプリ側でHTTP本文・圧縮された本文・POST・WebSocketを変えずに中継するテストを追加しました。LANからの実到達や各スマホの表示対応は別途検証する項目です。
+
 ## 再圧縮されていないか比較する
 
 両アプリが起動していて、他チャンネルを受信していないときに実行します。2本のローカルHTTP接続で同一チャンネルを共有受信します。実放送の映像・音声を各最大16 MiB保存するため、保存先はローカルの非公開フォルダーにしてください。

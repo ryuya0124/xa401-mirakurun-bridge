@@ -37,6 +37,13 @@ def main():
         parser.error('The unauthenticated streaming API must listen on loopback; use an authenticated proxy for remote use')
     if config.get('source'):
         lan_url('http://' + config['source'])
+    if config.get('lan_https'):
+        proxy = config['lan_https']
+        if proxy['listen'] != config.get('source'):
+            parser.error('LAN HTTPS listen must equal the explicitly selected LAN source')
+        for field in ('certificate', 'private_key'):
+            path = Path(proxy[field]).expanduser()
+            proxy[field] = str((args.config.parent / path).resolve())
     quality = config.get('quality', 'original')
     if quality not in ('original', 'mobile1', 'mobile2'):
         parser.error('quality must be original, mobile1, or mobile2')

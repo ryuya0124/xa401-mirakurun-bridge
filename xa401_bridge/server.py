@@ -13,6 +13,7 @@ from pydtcpip import DeviceStore
 from . import __version__
 from .device import Device, bound_socket, lan_url, source_index
 from .receiver import Receiver, TSNormalizer, credentials_from_file
+from .lan_proxy import start_proxy
 
 LOG = logging.getLogger('xa401_bridge')
 
@@ -117,6 +118,7 @@ class Bridge:
         self.lock = asyncio.Lock()
         self.http = None
         self.refresh_task = None
+        self.close_lan_proxy = None
 
     def connector(self):
         if self.source:
@@ -133,6 +135,9 @@ class Bridge:
             await self.http.close()
             raise
         LOG.info('Verified XA401; %s live services', len(self.device.services))
+        if self.config.get('lan_https'):
+            self.close_lan_proxy = await start_proxy(self.config['lan_https'], self.index)
+            LOG.info('Interface-bound LAN HTTPS frontend is ready')
         self.refresh_task = asyncio.create_task(self.refresh_loop())
 
     async def refresh_loop(self):
@@ -147,6 +152,8 @@ class Bridge:
                 LOG.warning('Catalogue refresh failed (%s); keeping last catalogue', type(exc).__name__)
 
     async def close(self, app):
+        if self.close_lan_proxy:
+            await self.close_lan_proxy()
         for task in (self.refresh_task, self.active.task if self.active else None):
             if task:
                 task.cancel()

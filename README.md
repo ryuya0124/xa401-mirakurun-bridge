@@ -1,5 +1,7 @@
 # XA401 Mirakurun Bridge
 
+このリポジトリはPython版の資料保存用です。現在の稼働版は別リポジトリの[XA401 Bridge Rust](https://github.com/ryuya0124/xa401-mirakurun-bridge-rust)へ移しました。Python版は稼働・切り戻しには使用しません。
+
 J:COM LINK XA401のライブ配信をPCで受信し、Mirakurun互換APIの一部として提供する独立アプリです。KonomiTVを変更せず接続できます。メーカーやDTLAによる認証製品ではありません。
 
 ```

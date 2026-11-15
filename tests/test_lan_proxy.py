@@ -51,11 +51,17 @@ async def test_https_proxy_preserves_compressed_body_post_and_websocket(monkeypa
         assert 'Origin' not in request.headers
         return web.Response(body=await request.read())
 
+    async def reservations(request):
+        assert request.path.startswith('/api/xa401/konomi/recording/')
+        assert 'Origin' not in request.headers
+        return web.json_response({'total': 1, 'reservations': [{'id': 123}]})
+
     upstream = web.Application()
     upstream.router.add_get('/data', data)
     upstream.router.add_post('/echo', echo)
     upstream.router.add_get('/ws', websocket)
     upstream.router.add_post('/xa401/echo', management)
+    upstream.router.add_get('/api/xa401/konomi/recording/reservations', reservations)
     captured = []
     original_socket = lan_proxy.listening_socket
 
@@ -80,6 +86,9 @@ async def test_https_proxy_preserves_compressed_body_post_and_websocket(monkeypa
                     assert response.status == 200
                     assert response.headers['Content-Encoding'] == 'gzip'
                     assert await response.read() == payload
+                async with client.get(base + '/api/recording/reservations', headers={'Origin': base}, ssl=context) as response:
+                    assert response.status == 200
+                    assert (await response.json())['total'] == 1
                 async with client.post(base + '/echo', data=b'\x00\x47body', ssl=context) as response:
                     assert await response.read() == b'\x00\x47body'
                 async with client.get(base + '/data?x=1', headers={'Host': 'attacker.invalid'}, ssl=context) as response:

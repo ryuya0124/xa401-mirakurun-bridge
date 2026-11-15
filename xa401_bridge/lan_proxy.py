@@ -73,11 +73,14 @@ async def start_proxy(config, index):
         external = bool(native_recordings and (
             request.path.rstrip('/') == '/api/videos' or tail == 'search' or
             (tail and tail.split('/')[0].isdigit() and int(tail.split('/')[0]) >= (1 << 48))))
-        management = external or request.path.startswith(('/xa401/', '/api/xa401/'))
+        reservations = bool(re.fullmatch(r'/api/recording/(?:reservations(?:/[0-9]+)?|presets)/?', request.path))
+        management = external or reservations or request.path.startswith(('/xa401/', '/api/xa401/'))
         backend = f'http://127.0.0.1:{int(config.get("bridge_port", 40772))}' if management else upstream
         raw_path = request.raw_path
         if external:
             raw_path = '/api/xa401/konomi/videos' + raw_path[len('/api/videos'):]
+        elif reservations:
+            raw_path = '/api/xa401/konomi/recording' + raw_path[len('/api/recording'):]
         target = backend + raw_path
         headers = headers_without_hop(request.headers)
         headers.popall('Host', None)

@@ -82,6 +82,8 @@ SITのARIB記述子・文字列はariblib 0.2.0（MIT、公開wheelを固定）�
 KonomiTV標準画面の予約一覧は、統合HTTPS入口でBridgeのPC録画予約へ接続します。
 一覧・詳細・取消に対応し、予約作成／編集は録画管理画面を使用します。
 XA401本体の予約ではありません。[対応範囲](docs/KONOMI_RESERVATIONS.md)。
+オプション連携パッチは、録画予約画面に「PC録画を管理」を追加します。
+Originalの初期バッファ待ちも短縮します。[管理画面への入口と起動待ち](docs/STARTUP_AND_MANAGEMENT.md)。
 
 WindowsのWinUI番組表向けに、`GET /xa401/api/native/guide`で観測済みSITの現在・直近の番組を配信します。
 放送局・開始時刻・長さ・番組名・説明を返し、未取得局はprogram=null、未来予定の取得可否はfalseです。

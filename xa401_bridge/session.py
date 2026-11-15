@@ -33,11 +33,14 @@ class ChannelSession:
         self.program_observations = 0
         self.received_time_range = None
         self.started = time.time()
+        self.start_clock = time.monotonic()
+        self.startup_ms = {}
 
     async def run(self):
         try:
             device = self.bridge.device
             resource = await device.resource(self.service_id)
+            self.startup_ms['metadata'] = round((time.monotonic() - self.start_clock) * 1000)
             expected_host, expected_port = lan_url(resource.url, device.host)
             normalizer = TSNormalizer()
             # A recording's historical SIT must never replace live EPG entries.
@@ -47,13 +50,16 @@ class ChannelSession:
             async def event(value):
                 nonlocal authenticated
                 if value.type == 'media_info_received':
+                    self.startup_ms['media_info'] = round((time.monotonic() - self.start_clock) * 1000)
                     self.received_time_range = value.media_info.time_range
                     if value.media_info.host != expected_host:
                         raise ValueError('Authentication endpoint left the verified XA401')
                 if value.type == 'authentication_started':
+                    self.startup_ms['authentication_started'] = round((time.monotonic() - self.start_clock) * 1000)
                     if value.is_move or value.host != expected_host:
                         raise ValueError('Unexpected authentication destination/operation')
                 if value.type == 'authentication_completed':
+                    self.startup_ms['authentication_completed'] = round((time.monotonic() - self.start_clock) * 1000)
                     authenticated = True
                     self.authentications += 1
                     LOG.info('Authentication completed for service %s', self.service_id)
@@ -65,6 +71,8 @@ class ChannelSession:
                 if not ts:
                     return
                 self.bytes_sent += len(ts)
+                if 'first_ts' not in self.startup_ms:
+                    self.startup_ms['first_ts'] = round((time.monotonic() - self.start_clock) * 1000)
                 for program in sit.feed(ts) if sit else ():
                     self.bridge.epg.update(program)
                     self.program_observations += 1
@@ -124,7 +132,8 @@ class ChannelSession:
                 'viewers': len(self.subscribers - self.background_subscribers),
                 'background_clients': len(self.background_subscribers),
                 'received_time_range': self.received_time_range,
-                'started_at': self.started, 'error_type': self.error_type}
+                'started_at': self.started, 'error_type': self.error_type,
+                'startup_ms': dict(self.startup_ms)}
 
     @property
     def has_viewers(self):

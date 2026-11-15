@@ -1,7 +1,8 @@
 """Observed current-program information from CRC-checked ARIB SIT sections.
 
 XA401 partial transport streams omit EIT, but include current event information
-in PID 0x1f/table 0x7f. No invented timestamps or automatic background tuning.
+in PID 0x1f/table 0x7f. No invented timestamps. Optional idle collection lives
+in collector.py and shares the same preemptible receiver.
 """
 import json
 import time

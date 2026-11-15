@@ -7,5 +7,12 @@
   "credentials": "./private/credentials.env",
   "state_dir": "./state",
   "quality": "original",
+  "epg_collection": {
+    "enabled": true,
+    "types": ["GR", "BS", "CS"],
+    "timeout_seconds": 10,
+    "interval_seconds": 2,
+    "refresh_seconds": 600
+  },
   "folders": ["0/tb", "0/bs", "0/remux"]
 }

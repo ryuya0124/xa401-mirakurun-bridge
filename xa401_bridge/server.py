@@ -15,6 +15,7 @@ from .device import Device, bound_socket, lan_url, source_index
 from .receiver import Receiver, TSNormalizer, credentials_from_file
 from .lan_proxy import start_proxy
 from .epg import ProgramCache, SITParser
+from .collector import EPGCollector
 
 LOG = logging.getLogger('xa401_bridge')
 
@@ -23,11 +24,13 @@ class ChannelSession:
     def __init__(self, bridge, service_id):
         self.bridge, self.service_id = bridge, service_id
         self.subscribers = set()
+        self.background_subscribers = set()
         self.ready = asyncio.Event()
         self.task = None
         self.error_type = None
         self.bytes_sent = 0
         self.authentications = 0
+        self.program_observations = 0
         self.started = time.time()
 
     async def run(self):
@@ -61,11 +64,13 @@ class ChannelSession:
                 self.bytes_sent += len(ts)
                 for program in sit.feed(ts):
                     self.bridge.epg.update(program)
+                    self.program_observations += 1
                 self.ready.set()
                 # Bound per-client memory; a stalled reader cannot block other viewers.
                 for queue in tuple(self.subscribers):
                     if queue.full():
                         self.subscribers.discard(queue)
+                        self.background_subscribers.discard(queue)
                         while not queue.empty():
                             queue.get_nowait()
                         queue.put_nowait(None)
@@ -107,7 +112,13 @@ class ChannelSession:
     def status(self):
         return {'service_id': self.service_id, 'authentication_completions': self.authentications,
                 'ts_bytes': self.bytes_sent, 'clients': len(self.subscribers),
+                'viewers': len(self.subscribers - self.background_subscribers),
+                'background_clients': len(self.background_subscribers),
                 'started_at': self.started, 'error_type': self.error_type}
+
+    @property
+    def has_viewers(self):
+        return bool(self.subscribers - self.background_subscribers)
 
 
 class Bridge:
@@ -125,6 +136,8 @@ class Bridge:
         self.close_lan_proxy = None
         self.epg = ProgramCache(config['state_dir'], config.get('udn', ''))
         self.epg_task = None
+        self.collector = EPGCollector(self, config.get('epg_collection', {}))
+        self.collector_task = None
 
     def connector(self):
         if self.source:
@@ -146,6 +159,8 @@ class Bridge:
             LOG.info('Interface-bound LAN HTTPS frontend is ready')
         self.refresh_task = asyncio.create_task(self.refresh_loop())
         self.epg_task = asyncio.create_task(self.persist_epg())
+        if self.collector.enabled:
+            self.collector_task = asyncio.create_task(self.collector.run())
 
     async def persist_epg(self):
         while True:
@@ -173,7 +188,7 @@ class Bridge:
     async def close(self, app):
         if self.close_lan_proxy:
             await self.close_lan_proxy()
-        for task in (self.refresh_task, self.epg_task, self.active.task if self.active else None):
+        for task in (self.collector_task, self.refresh_task, self.epg_task, self.active.task if self.active else None):
             if task:
                 task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
@@ -183,14 +198,21 @@ class Bridge:
         if self.epg.dirty:
             await asyncio.to_thread(self.epg.save, self.epg.snapshot())
 
-    async def subscribe(self, service_id):
+    async def subscribe(self, service_id, *, background=False):
         async with self.lock:
             if self.active and not self.active.task.done() and self.active.service_id != service_id:
-                raise web.HTTPServiceUnavailable(text='The single XA401 tuner is receiving another channel')
+                if background or self.active.has_viewers:
+                    raise web.HTTPServiceUnavailable(text='The single XA401 tuner is receiving another channel')
+                # An idle collector must release its receiver before a viewer tunes.
+                self.active.task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await self.active.task
             if not self.active or self.active.task.done():
                 self.active = ChannelSession(self, service_id)
             queue = asyncio.Queue(maxsize=32)
             self.active.subscribers.add(queue)
+            if background:
+                self.active.background_subscribers.add(queue)
             channel = self.active
             if channel.task is None:
                 channel.task = asyncio.create_task(channel.run())
@@ -199,6 +221,7 @@ class Bridge:
     async def unsubscribe(self, channel, queue):
         async with self.lock:
             channel.subscribers.discard(queue)
+            channel.background_subscribers.discard(queue)
             if not channel.subscribers and channel.task and not channel.task.done():
                 channel.task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
@@ -249,7 +272,7 @@ def create_app(config):
         return web.json_response(bridge.epg.programs())
 
     async def tuners(request):
-        busy = bridge.active is not None and not bridge.active.task.done()
+        busy = bridge.active is not None and not bridge.active.task.done() and bridge.active.has_viewers
         return web.json_response([{'index': 0, 'name': 'XA401 (streaming bridge)',
             'types': ['GR', 'BS', 'CS', 'CATV'], 'isAvailable': True, 'isFree': not busy,
             'isRemote': False, 'users': [] if not busy else [{'id': 'xa401-bridge', 'priority': 0}]}])
@@ -262,6 +285,7 @@ def create_app(config):
         return web.json_response({'status': 'ok', 'services': len(bridge.device.services),
             'active': bridge.active.status() if bridge.active and not bridge.active.task.done() else None,
             'last_stream': bridge.last_result, 'epg': 'observed_SIT',
+            'epg_collection': bridge.collector.status(),
             'cached_programs': len(bridge.epg.programs()), 'maximum_distinct_channels': 1})
 
     async def current(request):

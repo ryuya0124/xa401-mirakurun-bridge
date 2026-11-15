@@ -18,6 +18,17 @@ credentials.env
 *.m2ts
 *.mp4
 *.key
+*.pem
+*.crt
+*.cer
+*.der
+*.pfx
+*.p12
+*.p7b
+*.p7c
+*.jks
+*.keystore
+credential-backups/
 .env
 deploy/private-https.env
 deploy/private-https-runtime/

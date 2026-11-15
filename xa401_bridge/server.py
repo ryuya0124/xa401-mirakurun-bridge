@@ -14,6 +14,7 @@ from . import __version__
 from .device import Device, bound_socket, lan_url, source_index
 from .receiver import Receiver, TSNormalizer, credentials_from_file
 from .lan_proxy import start_proxy
+from .epg import ProgramCache, SITParser
 
 LOG = logging.getLogger('xa401_bridge')
 
@@ -35,6 +36,7 @@ class ChannelSession:
             resource = await device.resource(self.service_id)
             expected_host, expected_port = lan_url(resource.url, device.host)
             normalizer = TSNormalizer()
+            sit = SITParser(device.items[self.service_id]['service'])
             authenticated = False
 
             async def event(value):
@@ -57,6 +59,8 @@ class ChannelSession:
                 if not ts:
                     return
                 self.bytes_sent += len(ts)
+                for program in sit.feed(ts):
+                    self.bridge.epg.update(program)
                 self.ready.set()
                 # Bound per-client memory; a stalled reader cannot block other viewers.
                 for queue in tuple(self.subscribers):
@@ -119,6 +123,8 @@ class Bridge:
         self.http = None
         self.refresh_task = None
         self.close_lan_proxy = None
+        self.epg = ProgramCache(config['state_dir'], config.get('udn', ''))
+        self.epg_task = None
 
     def connector(self):
         if self.source:
@@ -139,6 +145,19 @@ class Bridge:
             self.close_lan_proxy = await start_proxy(self.config['lan_https'], self.index)
             LOG.info('Interface-bound LAN HTTPS frontend is ready')
         self.refresh_task = asyncio.create_task(self.refresh_loop())
+        self.epg_task = asyncio.create_task(self.persist_epg())
+
+    async def persist_epg(self):
+        while True:
+            await asyncio.sleep(10)
+            if self.epg.dirty:
+                snapshot = self.epg.snapshot()
+                self.epg.dirty = False
+                try:
+                    await asyncio.to_thread(self.epg.save, snapshot)
+                except OSError:
+                    self.epg.dirty = True
+                    LOG.warning('Could not persist the observed program cache; will retry')
 
     async def refresh_loop(self):
         while True:
@@ -154,13 +173,15 @@ class Bridge:
     async def close(self, app):
         if self.close_lan_proxy:
             await self.close_lan_proxy()
-        for task in (self.refresh_task, self.active.task if self.active else None):
+        for task in (self.refresh_task, self.epg_task, self.active.task if self.active else None):
             if task:
                 task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await task
         if self.http:
             await self.http.close()
+        if self.epg.dirty:
+            await asyncio.to_thread(self.epg.save, self.epg.snapshot())
 
     async def subscribe(self, service_id):
         async with self.lock:
@@ -225,8 +246,7 @@ def create_app(config):
         return web.json_response(bridge.device.services)
 
     async def programs(request):
-        # Mobile-quality XA401 streams observed so far omit EIT. Do not invent times/event IDs.
-        return web.json_response([])
+        return web.json_response(bridge.epg.programs())
 
     async def tuners(request):
         busy = bridge.active is not None and not bridge.active.task.done()
@@ -241,7 +261,8 @@ def create_app(config):
     async def health(request):
         return web.json_response({'status': 'ok', 'services': len(bridge.device.services),
             'active': bridge.active.status() if bridge.active and not bridge.active.task.done() else None,
-            'last_stream': bridge.last_result, 'epg': 'not_available', 'maximum_distinct_channels': 1})
+            'last_stream': bridge.last_result, 'epg': 'observed_SIT',
+            'cached_programs': len(bridge.epg.programs()), 'maximum_distinct_channels': 1})
 
     async def current(request):
         # DMS titles are genuine observations, but have no reliable schedule timestamps.

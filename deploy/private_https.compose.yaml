@@ -1,0 +1,24 @@
+services:
+  private-https:
+    image: nginx:alpine
+    container_name: xa401-private-https
+    restart: unless-stopped
+    labels:
+      com.ryuya.xa401.private_https: "1"
+    network_mode: host
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE, SETUID, SETGID, CHOWN]
+    security_opt: [no-new-privileges:true]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m,mode=1777
+    entrypoint:
+      - /bin/sh
+      - /watch-private-cert.sh
+      - /certs/live/${CERTIFICATE_NAME}/fullchain.pem
+    volumes:
+      - ${NGINX_CONFIG}:/etc/nginx/nginx.conf:ro
+      - ${DOMAIN_CERT_ROOT}/live/${CERTIFICATE_NAME}:/certs/live/${CERTIFICATE_NAME}:ro
+      - ${DOMAIN_CERT_ROOT}/archive/${CERTIFICATE_NAME}:/certs/archive/${CERTIFICATE_NAME}:ro
+      - ${WINDOWS_CA_CERT}:/etc/nginx/windows-ca.crt:ro
+      - ./watch_private_certificate.sh:/watch-private-cert.sh:ro

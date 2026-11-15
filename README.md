@@ -48,7 +48,7 @@ general:
 | `/api/services` | 現在のDMSライブチャンネル一覧 |
 | `/api/services/{networkId*100000+serviceId}/stream` | AKE・復号後の188バイトTS |
 | `/api/tuners` | 1チューナーとしての利用状態 |
-| `/api/programs` | 現在は空配列。EPG対応は未実装 |
+| `/api/programs` | 視聴中にSITから実測した現在番組の名称・開始時刻・放送時間・説明・ジャンル |
 | `/api/version` | アプリ名・バージョン |
 | `/health` | 受信状態・認証完了回数・配信バイト数 |
 | `/xa401/current-program-titles` | DMSで観測した現在の番組名。時刻未確定 |
@@ -56,7 +56,7 @@ general:
 - Mirakurun全APIの代替ではありません。録画予約・Move・ダビング・資格情報抽出・有効化は実装しません。
 - 同時に異なるチャンネルを受信する数は保守的に1に制限します。同一チャンネルの複数クライアントは同じ受信を共有します。他チャンネルの要求は503です。XA401の複数同時配信能力は別途検証が必要です。
 - 既定の`mobile1`はXA401で変換済みのH.264 720pです。元画質は`quality: original`で選択できますが、対応は実測を確認してください。
-- 現在観測したmobile1と元画質のTSにはEITがありません。番組時刻やイベントIDを捏造せず、KonomiTVのEPGは空とします。映像受信とは別の制約です。
+- XA401の部分TSにはEITがなくても、SITに現在番組の情報が含まれます。CRC・NID/TSID/SIDを照合し、実際の開始時刻・放送時間・イベントIDをKonomiTVへ渡します。まず視聴したチャンネルの現在番組だけを収集し、全チャンネルを自動選局したり週間番組表を創作したりしません。KonomiTVの更新間隔は0.5分を推奨し、初回表示に最大30秒程度かかる場合があります。
 - TSの到着時刻プレフィックスを外します。CCIや符号化映像を書き換えません。外側の暗号化状態と、内側のコピー制御・出力の許諾を混同しないでください。
 - APIには認証がないためloopback専用です。インターネットに公開しないでください。資格情報・設定・生通信記録・映像はGit管理の対象外です。
 - スマホ向けには、KonomiTVの画面だけを中継する任意のLAN HTTPS入口を有効にできます。Mirakurun APIのLAN公開ではありません。設定とファイアウォールの範囲は[導入手順](docs/DEPLOYMENT.md)を参照してください。
@@ -74,3 +74,5 @@ python -m pytest -q
 ## ライセンス
 
 本アプリはMIT。認証・復号は[pydtcpip](https://github.com/tsukumijima/pydtcpip)（MIT、固定コミット使用）を利用します。KonomiTV本体・バイナリ・資格情報は配布しません。各技術の特許・商標・コンテンツの権利を許諾するものではありません。
+
+SITのARIB記述子・文字列はariblib 0.2.0（MIT、公開wheelを固定）で読み取ります。[ライセンス通知](licenses/ariblib-MIT.txt)を同梱します。TLSを独自ドメインで使う構成は[非公開HTTPSの設定](docs/PRIVATE_HTTPS.md)を参照してください。

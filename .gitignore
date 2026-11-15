@@ -13,3 +13,6 @@ credentials.env
 *.pcapng
 *.ts
 *.key
+.env
+deploy/private-https.env
+deploy/private-https-runtime/

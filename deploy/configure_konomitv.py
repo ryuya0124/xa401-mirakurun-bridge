@@ -46,6 +46,7 @@ def main():
     replacements = {
         "backend: 'EDCB'": "backend: 'Mirakurun'",
         "encoder: 'FFmpeg'": f"encoder: '{args.encoder}'",
+        'program_update_interval: 5.0': 'program_update_interval: 0.5',
         'custom_https_certificate: null': f"custom_https_certificate: '{cert_path.as_posix()}'",
         'custom_https_private_key: null': f"custom_https_private_key: '{key_path.as_posix()}'",
         'E:\\TV-Record': (runtime / 'recordings').as_posix(),

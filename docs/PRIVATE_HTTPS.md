@@ -2,7 +2,7 @@
 
 実機構成の入口は `https://tv-home.ryuya-dev.net/xa401-original.html`。DNSは内部のAdGuardへだけ設定し、公開DNSレコード・Cloudflare Tunnelのルートは追加していません。LANとTailnetからOS標準の信頼ストアによる証明書検証付きで200、OriginalのTS受信も確認しました。
 
-**この環境のDNSの親はMacです。** `adguardhome-sync`が10分ごとにMacからDebianへ同期します。初回にDebianだけへ追加したレコードは次の同期で消え、スマホのNXDOMAINを再現しました。Macの親AdGuardへ公式の`/control/rewrite/add` APIでA/AAAAを追加し、Debianにも同じ2件を反映しました。ほかのrewrite・同期スケジュールは変更していません。再配置時も、同期先だけを変更せず先に同期元を確認してください。
+**この環境のDNSの親はMacです。** `adguardhome-sync`が10分ごとにMacからDebianへ同期します。初回にDebianだけへ追加したレコードは次の同期で消え、スマホのNXDOMAINを再現しました。Macの親AdGuardへ公式の`/control/rewrite/add` APIでA/AAAAを追加し、Debianにも同じ2件を反映しました。13:10 JSTの自動同期後も両側に残り、同期のエラー0を確認。ほかのrewrite・同期スケジュールは変更していません。再配置時も、同期先だけを変更せず先に同期元を確認してください。
 
 ## 実際の構成
 
@@ -15,7 +15,7 @@ LAN / Tailnetのブラウザー
 
 - 利用者が既に運用しているワイルドカード証明書を再利用。確認時の期限は2027-01-19。Cloudflare APIトークンを読取り・コピーせず、証明書の新規発行も行っていません。
 - Debianの既存IP `192.168.3.254:443` とTailnet IPv6 `[fd7a:115c:a1e0::36:1645]:443` だけで待受。既存の別アプリが使用する443番のIPは変更しません。
-- 内部DNSのAは`192.168.3.254`、AAAAはDebianのTailnet IPv6。Tailscaleの既存DNS `10.7.0.53` から解決でき、LANルーターのDNS `192.168.3.1` でも同じAを返すことを確認しました。
+- 内部DNSのAは`192.168.3.254`、AAAAはDebianのTailnet IPv6。Tailscaleの既存DNS `10.7.0.53` と内部DNS `192.168.3.254`、Macの5354番から生UDPでA/AAAAを確認しました。**LANルーターのDNS `192.168.3.1` は内部名を解決しません。** 初回のWindows上の明示DNS先検査はTailscaleのDNS介入があり、後のMac/Debianの生UDP検査で訂正しました。LANでも内部DNSを使用する端末設定が必要です。
 - IPv4 LAN・Tailnet IPv4/IPv6以外はNginxで拒否。Cloudflare HTTP経由の`CF-Ray`ヘッダー付き要求も403を返すことを確認しました。Cloudflareの公開HTTP入口を作る設定ではありません。
 - NginxからWindowsへもHTTPSで接続。ローカルCAを明示的に信頼し、証明書の`localhost`名を検証するため、検証無効化は使用しません。
 - 公開用秘密鍵はDebianに残ります。Nginxには対象ドメインのlive/archiveだけを読み取り専用マウントし、ACMEアカウントやCloudflare認証ファイルはマウントしません。

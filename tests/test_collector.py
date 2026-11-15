@@ -129,3 +129,56 @@ def test_valid_current_cache_delays_collection_until_expiry():
     c = EPGCollector(bridge, {'enabled': True})
     assert c.next_service(1000) is None
     assert c.next_service(1201) == 1
+
+
+async def test_two_slots_share_same_channel_and_reject_third_viewer(monkeypatch, tmp_path):
+    bridge = make_bridge(monkeypatch, tmp_path)
+    bridge.maximum = 2
+    first, q1 = await bridge.subscribe(1)
+    second, q2 = await bridge.subscribe(2)
+    shared, q3 = await bridge.subscribe(1)
+    assert shared is first and len(bridge.live_sessions) == 2
+    with pytest.raises(web.HTTPServiceUnavailable):
+        await bridge.subscribe(3)
+    with pytest.raises(web.HTTPServiceUnavailable):
+        await bridge.subscribe(3, background=True)
+    await bridge.unsubscribe(first, q3)
+    assert not first.task.done()
+    await bridge.unsubscribe(first, q1)
+    await bridge.unsubscribe(second, q2)
+
+
+async def test_two_slots_allow_collection_while_viewing_then_yield_only_collector(monkeypatch, tmp_path):
+    bridge = make_bridge(monkeypatch, tmp_path)
+    bridge.maximum = 2
+    first, q1 = await bridge.subscribe(1)
+    background, bg = await bridge.subscribe(2, background=True)
+    await asyncio.sleep(0)
+    assert not first.task.done() and not background.task.done()
+    second_viewer, q2 = await bridge.subscribe(3)
+    assert background.task.cancelled()
+    assert not first.task.done()
+    assert first in bridge.live_sessions and second_viewer in bridge.live_sessions
+    await bridge.unsubscribe(background, bg)
+    await bridge.unsubscribe(first, q1)
+    await bridge.unsubscribe(second_viewer, q2)
+
+
+async def test_cleanup_releases_both_receivers(monkeypatch, tmp_path):
+    bridge = make_bridge(monkeypatch, tmp_path)
+    bridge.maximum = 2
+    first, _ = await bridge.subscribe(1)
+    second, _ = await bridge.subscribe(2, background=True)
+    await asyncio.sleep(0)
+    await bridge.close(None)
+    assert first.task.done() and second.task.done()
+    assert bridge.live_sessions == []
+
+
+def test_bridge_rejects_unverified_slot_counts_and_two_transcodes(monkeypatch, tmp_path):
+    make_bridge(monkeypatch, tmp_path)
+    config = {'credentials': 'unused', 'state_dir': str(tmp_path)}
+    with pytest.raises(ValueError):
+        server.Bridge(dict(config, max_streams=3))
+    with pytest.raises(ValueError):
+        server.Bridge(dict(config, max_streams=2, quality='mobile1'))

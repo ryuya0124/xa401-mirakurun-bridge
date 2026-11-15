@@ -8,7 +8,8 @@ from aiohttp.test_utils import TestClient, TestServer
 from xa401_bridge import server
 
 
-async def test_mirakurun_subset_uses_catalogue_without_fabricating_epg(monkeypatch, tmp_path):
+@pytest.mark.parametrize('maximum', [1, 2])
+async def test_mirakurun_subset_uses_catalogue_without_fabricating_epg(monkeypatch, tmp_path, maximum):
     monkeypatch.setattr(server, 'credentials_from_file', lambda _: object())
     monkeypatch.setattr(server, 'source_index', lambda _: None)
 
@@ -17,12 +18,13 @@ async def test_mirakurun_subset_uses_catalogue_without_fabricating_epg(monkeypat
             items={123: {'current_title': 'Observed title'}})
 
     monkeypatch.setattr(server.Bridge, 'start', start)
-    app = server.create_app({'credentials': 'unused', 'state_dir': str(tmp_path)})
+    app = server.create_app({'credentials': 'unused', 'state_dir': str(tmp_path), 'max_streams': maximum})
     async with TestClient(TestServer(app)) as client:
         assert await (await client.get('/api/services')).json() == [{'id': 123, 'name': 'Observed channel'}]
         assert await (await client.get('/api/programs')).json() == []
-        assert (await (await client.get('/api/tuners')).json())[0]['isFree'] is True
-        assert (await (await client.get('/health')).json())['maximum_distinct_channels'] == 1
+        tuners = await (await client.get('/api/tuners')).json()
+        assert tuners[0]['isFree'] is True and len(tuners) == maximum
+        assert (await (await client.get('/health')).json())['maximum_distinct_channels'] == maximum
         assert (await client.get('/api/services/999/stream')).status == 404
         assert (await client.post('/api/services')).status == 405
 

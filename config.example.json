@@ -7,6 +7,7 @@
   "credentials": "./private/credentials.env",
   "state_dir": "./state",
   "quality": "original",
+  "max_streams": 2,
   "epg_collection": {
     "enabled": true,
     "types": ["GR", "BS", "CS"],

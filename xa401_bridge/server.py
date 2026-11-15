@@ -128,7 +128,13 @@ class Bridge:
         self.source = config.get('source')
         self.index = source_index(self.source)
         self.store = DeviceStore(Path(config['state_dir']) / 'dtcp')
-        self.active = None
+        self.sessions = {}
+        self.last_active = None
+        self.maximum = int(config.get('max_streams', 1))
+        if self.maximum not in (1, 2):
+            raise ValueError('max_streams must be 1 or 2; this is a bridge limit, not a tuner count')
+        if self.maximum == 2 and config.get('quality', 'original') != 'original':
+            raise ValueError('Two-stream operation requires original quality; concurrent transcoding is unverified')
         self.last_result = None
         self.lock = asyncio.Lock()
         self.http = None
@@ -138,6 +144,16 @@ class Bridge:
         self.epg_task = None
         self.collector = EPGCollector(self, config.get('epg_collection', {}))
         self.collector_task = None
+
+    @property
+    def live_sessions(self):
+        return [s for s in self.sessions.values() if s.task and not s.task.done()]
+
+    @property
+    def active(self):
+        # Compatibility for health consumers: prefer a viewing session.
+        live = self.live_sessions
+        return next((s for s in live if s.has_viewers), live[0] if live else self.last_active)
 
     def connector(self):
         if self.source:
@@ -178,7 +194,7 @@ class Bridge:
         while True:
             await asyncio.sleep(300)
             # Avoid extra SOAP traffic during an active stream.
-            if self.active and not self.active.task.done():
+            if self.live_sessions:
                 continue
             try:
                 await self.device.refresh()
@@ -188,7 +204,8 @@ class Bridge:
     async def close(self, app):
         if self.close_lan_proxy:
             await self.close_lan_proxy()
-        for task in (self.collector_task, self.refresh_task, self.epg_task, self.active.task if self.active else None):
+        for task in (self.collector_task, self.refresh_task, self.epg_task,
+                     *(s.task for s in self.live_sessions)):
             if task:
                 task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
@@ -200,20 +217,25 @@ class Bridge:
 
     async def subscribe(self, service_id, *, background=False):
         async with self.lock:
-            if self.active and not self.active.task.done() and self.active.service_id != service_id:
-                if background or self.active.has_viewers:
-                    raise web.HTTPServiceUnavailable(text='The single XA401 tuner is receiving another channel')
-                # An idle collector must release its receiver before a viewer tunes.
-                self.active.task.cancel()
+            self.sessions = {key: s for key, s in self.sessions.items() if not s.task.done()}
+            channel = self.sessions.get(service_id)
+            if channel is None and len(self.sessions) >= self.maximum:
+                victim = next((s for s in self.sessions.values() if not s.has_viewers), None)
+                if background or victim is None:
+                    raise web.HTTPServiceUnavailable(text='All configured bridge receive slots are in use')
+                # A collector yields its slot to a viewer, never the reverse.
+                victim.task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
-                    await self.active.task
-            if not self.active or self.active.task.done():
-                self.active = ChannelSession(self, service_id)
+                    await victim.task
+                self.sessions.pop(victim.service_id, None)
+            if channel is None:
+                channel = ChannelSession(self, service_id)
+                self.sessions[service_id] = channel
+            self.last_active = channel
             queue = asyncio.Queue(maxsize=32)
-            self.active.subscribers.add(queue)
+            channel.subscribers.add(queue)
             if background:
-                self.active.background_subscribers.add(queue)
-            channel = self.active
+                channel.background_subscribers.add(queue)
             if channel.task is None:
                 channel.task = asyncio.create_task(channel.run())
             return channel, queue
@@ -272,10 +294,12 @@ def create_app(config):
         return web.json_response(bridge.epg.programs())
 
     async def tuners(request):
-        busy = bridge.active is not None and not bridge.active.task.done() and bridge.active.has_viewers
-        return web.json_response([{'index': 0, 'name': 'XA401 (streaming bridge)',
-            'types': ['GR', 'BS', 'CS', 'CATV'], 'isAvailable': True, 'isFree': not busy,
-            'isRemote': False, 'users': [] if not busy else [{'id': 'xa401-bridge', 'priority': 0}]}])
+        viewing = [s for s in bridge.live_sessions if s.has_viewers]
+        return web.json_response([{'index': i, 'name': f'XA401 bridge receive slot {i + 1}',
+            'types': ['GR', 'BS', 'CS', 'CATV'], 'isAvailable': True, 'isFree': i >= len(viewing),
+            'isRemote': False, 'users': [] if i >= len(viewing) else
+                [{'id': f'xa401-bridge-{viewing[i].service_id}', 'priority': 0}]}
+            for i in range(bridge.maximum)])
 
     async def version(request):
         return web.json_response({'current': __version__, 'name': 'xa401-mirakurun-bridge',
@@ -284,9 +308,10 @@ def create_app(config):
     async def health(request):
         return web.json_response({'status': 'ok', 'services': len(bridge.device.services),
             'active': bridge.active.status() if bridge.active and not bridge.active.task.done() else None,
+            'streams': [s.status() for s in bridge.live_sessions],
             'last_stream': bridge.last_result, 'epg': 'observed_SIT',
             'epg_collection': bridge.collector.status(),
-            'cached_programs': len(bridge.epg.programs()), 'maximum_distinct_channels': 1})
+            'cached_programs': len(bridge.epg.programs()), 'maximum_distinct_channels': bridge.maximum})
 
     async def current(request):
         # DMS titles are genuine observations, but have no reliable schedule timestamps.

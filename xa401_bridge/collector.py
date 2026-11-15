@@ -90,8 +90,7 @@ class EPGCollector:
     async def run(self):
         await asyncio.sleep(3)
         while True:
-            channel = self.bridge.active
-            if not channel or channel.task.done():
+            if len(self.bridge.live_sessions) < self.bridge.maximum:
                 sid = self.next_service(time.time())
                 if sid is not None:
                     result = await self.collect(sid)

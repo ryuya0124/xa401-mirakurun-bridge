@@ -20,6 +20,7 @@ from .recording import Recorder
 from .recording_api import install_recording_routes
 from .recorded_playback import install_playback_routes
 from .konomi_recordings import install_konomi_recording_routes
+from .native_playback import install_native_routes
 
 LOG = logging.getLogger('xa401_bridge')
 
@@ -237,4 +238,5 @@ def create_app(config):
     install_recording_routes(app, bridge)
     install_playback_routes(app, bridge)
     install_konomi_recording_routes(app, bridge)
+    install_native_routes(app, bridge)
     return app
